@@ -1,0 +1,103 @@
+// Heading styles
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: @font-family-heading;
+  font-weight: @font-weight-bold;
+  line-height: @line-height-tight;
+  margin-top: 0;
+  margin-bottom: @spacing-md;
+  color: @color-text;
+}
+
+h1, .h1 {
+  font-size: 2.5rem;
+}
+
+h2, .h2 {
+  font-size: 2rem;
+}
+
+h3, .h3 {
+  font-size: 1.75rem;
+}
+
+h4, .h4 {
+  font-size: 1.5rem;
+}
+
+h5, .h5 {
+  font-size: 1.25rem;
+}
+
+h6, .h6 {
+  font-size: 1rem;
+}
+
+// Paragraph styles
+p {
+  margin-top: 0;
+  margin-bottom: @spacing-md;
+  line-height: @line-height-base;
+}
+
+// Link styles
+a {
+  color: @color-primary;
+  text-decoration: none;
+  .transition(color);
+
+  &:hover {
+    color: darken(@color-primary, 10%);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    .focus-visible();
+  }
+}
+
+// Text utilities
+.text-primary {
+  color: @color-primary;
+}
+
+.text-secondary {
+  color: @color-text-secondary;
+}
+
+.text-muted {
+  color: @color-text-secondary;
+  opacity: 0.6;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-bold {
+  font-weight: @font-weight-bold;
+}
+
+.text-medium {
+  font-weight: @font-weight-medium;
+}
+
+.text-normal {
+  font-weight: @font-weight-normal;
+}
+
+.text-small {
+  font-size: @font-size-sm;
+}
+
+.text-large {
+  font-size: @font-size-lg;
+}

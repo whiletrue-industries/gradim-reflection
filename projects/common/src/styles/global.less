@@ -1,0 +1,56 @@
+// Global styles to be imported in app-level styles.less files
+// This file includes reset, typography, and global styles
+
+@import './_variables.less';
+@import './_mixins.less';
+@import './_reset.less';
+@import './_typography.less';
+
+// Example: Import Google Fonts
+// @import (css) url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+// Global utility classes
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: @spacing-md;
+  padding-right: @spacing-md;
+
+  .respond-to-md({
+    padding-left: @spacing-lg;
+    padding-right: @spacing-lg;
+  });
+}
+
+.container-fluid {
+  width: 100%;
+  padding-left: @spacing-md;
+  padding-right: @spacing-md;
+}
+
+// Spacing utilities
+.mt-0 { margin-top: 0 !important; }
+.mt-sm { margin-top: @spacing-sm !important; }
+.mt-md { margin-top: @spacing-md !important; }
+.mt-lg { margin-top: @spacing-lg !important; }
+.mt-xl { margin-top: @spacing-xl !important; }
+
+.mb-0 { margin-bottom: 0 !important; }
+.mb-sm { margin-bottom: @spacing-sm !important; }
+.mb-md { margin-bottom: @spacing-md !important; }
+.mb-lg { margin-bottom: @spacing-lg !important; }
+.mb-xl { margin-bottom: @spacing-xl !important; }
+
+.pt-0 { padding-top: 0 !important; }
+.pt-sm { padding-top: @spacing-sm !important; }
+.pt-md { padding-top: @spacing-md !important; }
+.pt-lg { padding-top: @spacing-lg !important; }
+.pt-xl { padding-top: @spacing-xl !important; }
+
+.pb-0 { padding-bottom: 0 !important; }
+.pb-sm { padding-bottom: @spacing-sm !important; }
+.pb-md { padding-bottom: @spacing-md !important; }
+.pb-lg { padding-bottom: @spacing-lg !important; }
+.pb-xl { padding-bottom: @spacing-xl !important; }

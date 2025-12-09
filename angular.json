@@ -57,7 +57,11 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "outputMode": "static",
+              "server": false,
+              "ssr": false,
+              "outputPath": "dist/main/browser"
             },
             "development": {
               "optimization": false,
@@ -156,7 +160,12 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "outputMode": "static",
+              "server": false,
+              "ssr": false,
+              "baseHref": "/sample-reflect/",
+              "outputPath": "dist/sample-reflect/browser"
             },
             "development": {
               "optimization": false,
