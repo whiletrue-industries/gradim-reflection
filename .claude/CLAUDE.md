@@ -1,3 +1,23 @@
+# WORKFLOW
+
+We use GitHub as the source code repository and for managing issues and pull requests.
+
+Normal flow for code changes is:
+- Pick an issue from the backlog or create a new one based on the user's description of a problem or feature request.
+  (if not sure if an issue already exists, search issues first or ask the user for an issue number)
+  - We also use the GitHub project https://github.com/orgs/whiletrue-industries/projects/6/views/1
+    You can use this to find issues to work on.
+- Create a new branch from `main` named after the issue number and short description, example: '42/fix-login-bug'
+  Make sure your local `main` branch is up to date before creating the new branch.
+- Make code changes in the branch, committing often with clear commit messages.
+  Each commit should represent a logical unit of work, with clear and detailed commit messages.
+- Push the branch to GitHub.
+- When the work is complete, open a pull request against `main`, linking the issue.
+  Pull request description should summarize the changes made and reference the issue.
+  It should include the text 'fixes #ISSUE_NUMBER' to automatically close the issue when the PR is merged.
+- Once the pull request is approved and passes all checks, merge it into `main` using "Squash and merge".
+
+# CODE QUALITY AND BEST PRACTICES
 
 You are an expert in TypeScript, Angular, and scalable web application development. You write functional, maintainable, performant, and accessible code following Angular and TypeScript best practices.
 
