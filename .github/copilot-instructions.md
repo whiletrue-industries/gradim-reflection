@@ -27,7 +27,7 @@ These are the main components of our documentation:
 - documentation/ARCHITECTURE.md: High-level architecture: overview, components, data flow, protocols, interfaces.
 - documentation/CODING_STANDARDS.md: Coding standards and best practices for the project.
 - documentation/DEVELOPMENT_ENV.md: Instructions for setting up the development environment.
-- documentation/DEVOPS.md: Deployment and operations procedures.
+- documentation/DEVOPS.md: Deployment, CI and operations procedures.
 - documentation/TESTING.md: Testing strategies, frameworks, and guidelines.
 - documentation/DESIGN_SYSTEM.md: Design system guidelines and assets.
 - documentation/EXTENDING.md: Guidelines for extending the platform with new features or modules.
