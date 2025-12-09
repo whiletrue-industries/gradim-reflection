@@ -13,7 +13,8 @@ Normal flow for code changes is:
   Make sure your local `main` branch is up to date before creating the new branch.
 - Make code changes in the branch, committing often with clear commit messages.
   Each commit should represent a logical unit of work, with clear and detailed commit messages.
-- Push the branch to GitHub.
+- When done, ask the user to review the changes and provide feedback or request modifications.
+- Once the user approves, push the branch to GitHub.
 - When the work is complete, open a pull request against `main`, linking the issue.
   Pull request description should summarize the changes made and reference the issue.
   It should include the text 'fixes #ISSUE_NUMBER' to automatically close the issue when the PR is merged.
