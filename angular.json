@@ -61,7 +61,7 @@
               "outputMode": "static",
               "server": false,
               "ssr": false,
-              "outputPath": "dist/main/browser"
+              "outputPath": "dist/main"
             },
             "development": {
               "optimization": false,
@@ -168,7 +168,7 @@
               "server": false,
               "ssr": false,
               "baseHref": "/sample-reflect/",
-              "outputPath": "dist/sample-reflect/browser"
+              "outputPath": "dist/sample-reflect"
             },
             "development": {
               "optimization": false,
