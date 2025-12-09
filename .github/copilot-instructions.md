@@ -8,6 +8,7 @@ Normal flow for code changes is:
   - We also use the GitHub project https://github.com/orgs/whiletrue-industries/projects/6/views/1
     You can use this to find issues to work on.
 - Based on the description of the issue, write a detailed implementation plan and add it to the issue as a comment.
+  Follow the guidelines in the existing documentation (see below) where applicable.
   Ask the user for confirmation of the plan (or for changes) before starting implementation.
 - Create a new branch from `main` named after the issue number and short description, example: '42/fix-login-bug'
   Make sure your local `main` branch is up to date before creating the new branch.
@@ -94,3 +95,6 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 - Design services around a single responsibility
 - Use the `providedIn: 'root'` option for singleton services
 - Use the `inject()` function instead of constructor injection
+
+## CLI
+- Use Angular CLI for generating components, services, and other artifacts (e.g. `ng generate component my-component`).
