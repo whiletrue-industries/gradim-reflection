@@ -8,5 +8,5 @@ import { RouterOutlet } from '@angular/router';
   styleUrl: './app.less'
 })
 export class App {
-  protected readonly title = signal('reflect');
+  protected readonly title = signal('sample-reflect');
 }

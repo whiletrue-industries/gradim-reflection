@@ -7,36 +7,36 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "no": {
+    "main": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
           "style": "less"
         }
       },
-      "root": "",
-      "sourceRoot": "src",
+      "root": "projects/main",
+      "sourceRoot": "projects/main/src",
       "prefix": "app",
       "architect": {
         "build": {
           "builder": "@angular/build:application",
           "options": {
-            "browser": "src/main.ts",
-            "tsConfig": "tsconfig.app.json",
+            "browser": "projects/main/src/main.ts",
+            "tsConfig": "projects/main/tsconfig.app.json",
             "inlineStyleLanguage": "less",
             "assets": [
               {
                 "glob": "**/*",
-                "input": "public"
+                "input": "projects/main/public"
               }
             ],
             "styles": [
-              "src/styles.less"
+              "projects/main/src/styles.less"
             ],
-            "server": "src/main.server.ts",
+            "server": "projects/main/src/main.server.ts",
             "outputMode": "server",
             "ssr": {
-              "entry": "src/server.ts"
+              "entry": "projects/main/src/server.ts"
             }
           },
           "configurations": {
@@ -67,10 +67,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "no:build:production"
+              "buildTarget": "main:build:production"
             },
             "development": {
-              "buildTarget": "no:build:development"
+              "buildTarget": "main:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -80,36 +80,62 @@
         }
       }
     },
-    "reflect": {
+    "common": {
+      "projectType": "library",
+      "root": "projects/common",
+      "sourceRoot": "projects/common/src",
+      "prefix": "lib",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/common/tsconfig.lib.prod.json"
+            },
+            "development": {
+              "tsConfig": "projects/common/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "projects/common/tsconfig.spec.json"
+          }
+        }
+      }
+    },
+    "sample-reflect": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
           "style": "less"
         }
       },
-      "root": "projects/reflect",
-      "sourceRoot": "projects/reflect/src",
+      "root": "projects/sample-reflect",
+      "sourceRoot": "projects/sample-reflect/src",
       "prefix": "app",
       "architect": {
         "build": {
           "builder": "@angular/build:application",
           "options": {
-            "browser": "projects/reflect/src/main.ts",
-            "tsConfig": "projects/reflect/tsconfig.app.json",
+            "browser": "projects/sample-reflect/src/main.ts",
+            "tsConfig": "projects/sample-reflect/tsconfig.app.json",
             "inlineStyleLanguage": "less",
             "assets": [
               {
                 "glob": "**/*",
-                "input": "projects/reflect/public"
+                "input": "projects/sample-reflect/public"
               }
             ],
             "styles": [
-              "projects/reflect/src/styles.less"
+              "projects/sample-reflect/src/styles.less"
             ],
-            "server": "projects/reflect/src/main.server.ts",
+            "server": "projects/sample-reflect/src/main.server.ts",
             "outputMode": "server",
             "ssr": {
-              "entry": "projects/reflect/src/server.ts"
+              "entry": "projects/sample-reflect/src/server.ts"
             }
           },
           "configurations": {
@@ -140,10 +166,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "reflect:build:production"
+              "buildTarget": "sample-reflect:build:production"
             },
             "development": {
-              "buildTarget": "reflect:build:development"
+              "buildTarget": "sample-reflect:build:development"
             }
           },
           "defaultConfiguration": "development"

@@ -1,5 +1,5 @@
 {
-  "name": "no",
+  "name": "reflect",
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
@@ -7,8 +7,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "serve:ssr:no": "node dist/no/server/server.mjs",
-    "serve:ssr:reflect": "node dist/reflect/server/server.mjs"
+    "serve:ssr:main": "node dist/main/server/server.mjs",
+    "serve:ssr:sample-reflect": "node dist/sample-reflect/server/server.mjs"
   },
   "prettier": {
     "printWidth": 100,
@@ -45,6 +45,7 @@
     "@types/node": "^20.17.19",
     "jsdom": "^27.1.0",
     "less": "^4.2.0",
+    "ng-packagr": "^21.0.0",
     "typescript": "~5.9.2",
     "vitest": "^4.0.8"
   }

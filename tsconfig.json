@@ -3,6 +3,11 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
+    "paths": {
+      "common": [
+        "./dist/common"
+      ]
+    },
     "strict": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
@@ -24,16 +29,22 @@
   "files": [],
   "references": [
     {
-      "path": "./tsconfig.app.json"
+      "path": "./projects/main/tsconfig.app.json"
     },
     {
-      "path": "./tsconfig.spec.json"
+      "path": "./projects/main/tsconfig.spec.json"
     },
     {
-      "path": "./projects/reflect/tsconfig.app.json"
+      "path": "./projects/common/tsconfig.lib.json"
     },
     {
-      "path": "./projects/reflect/tsconfig.spec.json"
+      "path": "./projects/common/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/sample-reflect/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/sample-reflect/tsconfig.spec.json"
     }
   ]
 }
