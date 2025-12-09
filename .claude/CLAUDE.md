@@ -7,6 +7,8 @@ Normal flow for code changes is:
   (if not sure if an issue already exists, search issues first or ask the user for an issue number)
   - We also use the GitHub project https://github.com/orgs/whiletrue-industries/projects/6/views/1
     You can use this to find issues to work on.
+- Based on the description of the issue, write a detailed implementation plan and add it to the issue as a comment.
+  Ask the user for confirmation of the plan (or for changes) before starting implementation.
 - Create a new branch from `main` named after the issue number and short description, example: '42/fix-login-bug'
   Make sure your local `main` branch is up to date before creating the new branch.
 - Make code changes in the branch, committing often with clear commit messages.
@@ -16,6 +18,22 @@ Normal flow for code changes is:
   Pull request description should summarize the changes made and reference the issue.
   It should include the text 'fixes #ISSUE_NUMBER' to automatically close the issue when the PR is merged.
 - Once the pull request is approved and passes all checks, merge it into `main` using "Squash and merge".
+
+# DOCUMENTATION
+
+Each code change must be accompanied by appropriate documentation updates.
+
+These are the main components of our documentation:
+- documentation/ARCHITECTURE.md: High-level architecture: overview, components, data flow, protocols, interfaces.
+- documentation/CODING_STANDARDS.md: Coding standards and best practices for the project.
+- documentation/DEVELOPMENT_ENV.md: Instructions for setting up the development environment.
+- documentation/DEVOPS.md: Deployment and operations procedures.
+- documentation/TESTING.md: Testing strategies, frameworks, and guidelines.
+- documentation/DESIGN_SYSTEM.md: Design system guidelines and assets.
+- documentation/EXTENDING.md: Guidelines for extending the platform with new features or modules.
+
+If any of these files does not exist yet, create it and add the relevant information.
+REMEMBER: We aim to update documentation and not just dump more text into a file. Structure the information clearly. Read the existing documentation to understand the style and format used. Update the contents of the files as needed to keep them accurate and useful. Remove outdated information if necessary.
 
 # CODE QUALITY AND BEST PRACTICES
 

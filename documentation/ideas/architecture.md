@@ -1,5 +1,5 @@
 ## Possible architecture for Gradin Reflections
-GraDiM Reflections will work as an indipendent platform for interactive apps reflecting on the GraDiM archive.
+GraDiM Reflections will work as an independent platform for interactive apps reflecting on the GraDiM archive.
 It will be querying the GraDiM API for items and metadata.
 It will be reachable from GraDiM interface through multiple paths, starting with the share interface.
 
