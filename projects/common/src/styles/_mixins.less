@@ -1,0 +1,127 @@
+// Responsive breakpoint mixins
+.respond-to-xs(@rules) {
+  @media (min-width: @breakpoint-xs) {
+    @rules();
+  }
+}
+
+.respond-to-sm(@rules) {
+  @media (min-width: @breakpoint-sm) {
+    @rules();
+  }
+}
+
+.respond-to-md(@rules) {
+  @media (min-width: @breakpoint-md) {
+    @rules();
+  }
+}
+
+.respond-to-lg(@rules) {
+  @media (min-width: @breakpoint-lg) {
+    @rules();
+  }
+}
+
+.respond-to-xl(@rules) {
+  @media (min-width: @breakpoint-xl) {
+    @rules();
+  }
+}
+
+// Flexbox utilities
+.flex-center() {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-column() {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-row() {
+  display: flex;
+  flex-direction: row;
+}
+
+// Text utilities
+.text-truncate() {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-ellipsis(@lines) {
+  display: -webkit-box;
+  -webkit-line-clamp: @lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Shadow utilities
+.elevation(@level) when (@level = 1) {
+  box-shadow: @shadow-sm;
+}
+
+.elevation(@level) when (@level = 2) {
+  box-shadow: @shadow-md;
+}
+
+.elevation(@level) when (@level = 3) {
+  box-shadow: @shadow-lg;
+}
+
+// Transition utilities
+.transition(@property: all, @duration: @transition-base) {
+  transition: @property @duration;
+}
+
+// Clearfix
+.clearfix() {
+  &::after {
+    content: '';
+    display: table;
+    clear: both;
+  }
+}
+
+// Visually hidden (for accessibility)
+.visually-hidden() {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// Focus styles (for accessibility)
+.focus-visible() {
+  outline: 2px solid @color-primary;
+  outline-offset: 2px;
+}
+
+// Aspect ratio box
+.aspect-ratio(@width, @height) {
+  position: relative;
+
+  &::before {
+    content: '';
+    display: block;
+    padding-top: (@height / @width) * 100%;
+  }
+
+  > * {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+}

@@ -57,12 +57,19 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "outputMode": "static",
+              "server": false,
+              "ssr": false,
+              "outputPath": "dist/main"
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true
+              "sourceMap": true,
+              "outputMode": "static",
+              "server": false,
+              "ssr": false
             }
           },
           "defaultConfiguration": "production"
@@ -156,12 +163,20 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "outputMode": "static",
+              "server": false,
+              "ssr": false,
+              "baseHref": "/sample-reflect/",
+              "outputPath": "dist/sample-reflect"
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true
+              "sourceMap": true,
+              "outputMode": "static",
+              "server": false,
+              "ssr": false
             }
           },
           "defaultConfiguration": "production"

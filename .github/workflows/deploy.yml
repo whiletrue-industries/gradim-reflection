@@ -1,0 +1,55 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build common library
+        run: npm run build -- common
+
+      - name: Build main app
+        run: npm run build -- main --configuration production
+
+      - name: Build sample-reflect app
+        run: npm run build -- sample-reflect --configuration production
+
+      - name: Prepare deployment directory
+        run: |
+          mkdir -p deploy
+          cp -r dist/main/browser/* deploy/
+          mkdir -p deploy/sample-reflect
+          cp -r dist/sample-reflect/browser/* deploy/sample-reflect/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy
+          publish_branch: gh-pages
