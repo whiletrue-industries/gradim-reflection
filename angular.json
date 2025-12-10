@@ -61,6 +61,7 @@
               "outputMode": "static",
               "server": false,
               "ssr": false,
+              "baseHref": "/gradim-reflection/",
               "outputPath": "dist/main"
             },
             "development": {
@@ -167,7 +168,7 @@
               "outputMode": "static",
               "server": false,
               "ssr": false,
-              "baseHref": "/sample-reflect/",
+              "baseHref": "/gradim-reflection/sample-reflect/",
               "outputPath": "dist/sample-reflect"
             },
             "development": {
