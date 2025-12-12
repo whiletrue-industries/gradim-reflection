@@ -21,6 +21,11 @@ Normal flow for code changes is:
   It should include the text 'fixes #ISSUE_NUMBER' to automatically close the issue when the PR is merged.
 - Once the pull request is approved and passes all checks, merge it into `main` using "Squash and merge".
 
+# COMMON TASKS
+
+- Run the development server: `npm start {app-name}` (e.g. `npm start main` or `npm start sample-reflect`)
+- Build a specific app: `npm run build {app-name}` (e.g. `npm run build main` or `npm run build sample-reflect`)
+
 # DOCUMENTATION
 
 Each code change must be accompanied by appropriate documentation updates.
