@@ -1,6 +1,6 @@
 import { Component, signal, computed, inject, ChangeDetectionStrategy } from '@angular/core';
 import { Layout } from 'common';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { DomSanitizer } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-monadic-mockup',
@@ -16,9 +16,13 @@ export class MonadicMockup {
   protected readonly baseUrl = 'https://lab.jona.im/monadic-embedded/#240222';
 
   protected readonly iframeSrc = computed(() => {
-    const url = this.isExpanded() ? `${this.baseUrl}/expanded` : this.baseUrl;
+    const url = this.currentUrl();
     return this.sanitizer.bypassSecurityTrustResourceUrl(url);
   });
+
+  protected readonly currentUrl = computed(() => 
+    this.isExpanded() ? `${this.baseUrl}/expanded` : this.baseUrl
+  );
 
   protected toggleView(): void {
     this.isExpanded.update(value => !value);
