@@ -1,0 +1,34 @@
+<lib-layout>
+  <div class="monadic-container">
+    <div class="header">
+      <h1>GraDiM Monadic Wall Mockup</h1>
+      <button 
+        type="button"
+        class="toggle-button" 
+        (click)="toggleView()"
+        [attr.aria-label]="isExpanded() ? 'Switch to monadic view' : 'Switch to lightbox view'"
+      >
+        @if (isExpanded()) {
+          Switch to Monadic View
+        } @else {
+          Switch to Lightbox View
+        }
+      </button>
+    </div>
+    
+    <div class="iframe-container">
+      <iframe
+        [src]="iframeSrc()"
+        title="Monadic Wall"
+        class="monadic-iframe"
+        allow="fullscreen"
+        loading="lazy"
+      ></iframe>
+    </div>
+    
+    <div class="info">
+      <p>Current view: <strong>{{ isExpanded() ? 'Lightbox (expanded)' : 'Monadic' }}</strong></p>
+      <p>URL: <code>{{ isExpanded() ? baseUrl + '/expanded' : baseUrl }}</code></p>
+    </div>
+  </div>
+</lib-layout>
