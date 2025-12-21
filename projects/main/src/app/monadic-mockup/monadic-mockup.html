@@ -1,0 +1,50 @@
+<lib-layout>
+  <div class="monadic-container">
+    <div class="header">
+      <h1>GraDiM Monadic Wall Mockup</h1>
+      <div class="controls">
+        <button 
+          type="button"
+          class="toggle-button" 
+          (click)="toggleView()"
+          [attr.aria-label]="isExpanded() ? 'Switch to monadic view' : 'Switch to lightbox view'"
+        >
+          @if (isExpanded()) {
+            Switch to Monadic View
+          } @else {
+            Switch to Lightbox View
+          }
+        </button>
+        <div class="scale-indicator" aria-live="polite">Zoom: {{ (scale() * 100) | number:'1.0-0' }}%</div>
+      </div>
+    </div>
+
+    <div 
+      class="viewport"
+      (wheel)="onWheel($event)"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp()"
+      (pointercancel)="onPointerUp()"
+    >
+      <div class="content" [style.transform]="contentTransform()" [style.transform-origin]="'0 0'">
+        <!-- Monadic iFrame item -->
+        <div class="item" [style.transform]="itemTransform(monadicItem)" [style.width.px]="monadicItem.width" [style.height.px]="monadicItem.height">
+          <iframe
+            [src]="iframeSrc()"
+            title="Monadic Wall"
+            class="monadic-iframe"
+            allow="fullscreen"
+            loading="lazy"
+          ></iframe>
+        </div>
+      </div>
+    </div>
+
+    <div class="info">
+      <p>Current view: <strong>{{ isExpanded() ? 'Lightbox (expanded)' : 'Monadic' }}</strong></p>
+      <p>URL: <code>{{ currentUrl() }}</code></p>
+      <p>Hint: Scroll to zoom; drag to pan.</p>
+    </div>
+  </div>
+</lib-layout>
