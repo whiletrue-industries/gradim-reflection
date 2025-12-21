@@ -142,7 +142,7 @@ export class Canvas {
   }
 
   private generateId(): string {
-    return 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    return 'obj-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11);
   }
 
   protected onObjectClick(event: MouseEvent, objectId: string): void {
