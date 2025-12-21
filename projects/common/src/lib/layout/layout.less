@@ -32,3 +32,16 @@
     padding: @spacing-sm;
   }
 }
+
+// Full-screen mode for canvas-like components
+:host(.full-screen) {
+  .layout-container {
+    overflow: hidden;
+  }
+  
+  .layout-content {
+    max-width: 100%;
+    padding: 0;
+    margin: 0;
+  }
+}

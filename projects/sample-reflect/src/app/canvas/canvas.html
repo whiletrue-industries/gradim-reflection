@@ -1,0 +1,48 @@
+<div 
+  class="canvas-container"
+  (click)="onCanvasClick($event)"
+  (drop)="onDrop($event)"
+  (dragover)="onDragOver($event)"
+>
+  <div class="dot-grid"></div>
+  
+  <div class="canvas-objects">
+    @for (obj of objects(); track obj.id) {
+      <div 
+        class="canvas-object"
+        [class.selected]="selectedObjectId() === obj.id"
+        [ngStyle]="getObjectStyle(obj)"
+        (click)="onObjectClick($event, obj.id)"
+        (mousedown)="onObjectMouseDown($event, obj.id)"
+      >
+        @if (obj.type === 'image') {
+          <img [src]="obj.content" alt="Canvas image" class="object-content" />
+        } @else if (obj.type === 'iframe') {
+          <iframe 
+            [src]="obj.safeUrl || obj.content" 
+            class="object-content"
+            sandbox="allow-scripts allow-same-origin allow-forms"
+          ></iframe>
+        }
+        
+        @if (selectedObjectId() === obj.id) {
+          <div class="transform-handles">
+            @for (handle of transformHandles; track handle.type) {
+              <div 
+                class="handle"
+                [class]="'handle-' + handle.type"
+                [ngStyle]="getHandlePosition(obj, handle)"
+                [style.cursor]="handle.cursor"
+                (mousedown)="onHandleMouseDown($event, obj.id, handle.type)"
+              ></div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+  
+  <div class="canvas-instructions">
+    <p>Drag and drop images here or paste URLs (Ctrl/Cmd+V)</p>
+  </div>
+</div>
