@@ -12,11 +12,12 @@ interface CanvasObject {
   rotation: number;
   content: string; // URL for image or iframe
   sourceRef: string; // canonical ref used in hash (URL or token)
+  originalAspectRatio: number; // h/w ratio of original content
   safeUrl?: SafeResourceUrl; // Sanitized URL for iframes
 }
 
 interface TransformHandle {
-  type: 'move' | 'scale-nw' | 'scale-ne' | 'scale-sw' | 'scale-se' | 'rotate';
+  type: 'move' | 'scale-nw' | 'scale-ne' | 'scale-sw' | 'scale-se' | 'scale-w' | 'scale-e' | 'scale-n' | 'scale-s' | 'rotate';
   cursor: string;
 }
 
@@ -37,6 +38,8 @@ export class Canvas {
   private hashUpdateHandle: number | null = null;
   private readonly hashThrottleMs = 80;
   private lastSerializedHash = '';
+  private suppressHash = false; // suppress hash writes during interactions
+  private hashDirty = false;    // track pending changes while suppressed
   
   protected objects = signal<CanvasObject[]>([]);
   protected selectedObjectId = signal<string | null>(null);
@@ -60,12 +63,18 @@ export class Canvas {
   private originalObject: CanvasObject | null = null;
   private panStartViewportX = 0;
   private panStartViewportY = 0;
+  private rotateStartAngle = 0;
+  private rotateStartRotation = 0;
   
   protected readonly transformHandles: TransformHandle[] = [
     { type: 'scale-nw', cursor: 'nw-resize' },
     { type: 'scale-ne', cursor: 'ne-resize' },
     { type: 'scale-sw', cursor: 'sw-resize' },
     { type: 'scale-se', cursor: 'se-resize' },
+    { type: 'scale-w', cursor: 'w-resize' },
+    { type: 'scale-e', cursor: 'e-resize' },
+    { type: 'scale-n', cursor: 'n-resize' },
+    { type: 'scale-s', cursor: 's-resize' },
     { type: 'rotate', cursor: 'grab' },
   ];
 
@@ -74,6 +83,7 @@ export class Canvas {
       this.setupEventListeners();
       this.applyHashState(window.location.hash);
       window.addEventListener('hashchange', this.onHashChange);
+      window.addEventListener('keydown', (e) => this.onKeyDown(e));
       effect(() => {
         // Track canvas view and objects; schedule hash sync when they change.
         this.viewportX();
@@ -120,17 +130,39 @@ export class Canvas {
           const content = reader.result as string;
           const sourceRef = this.deriveSourceRef(content, file.name);
           
-          this.addObject({
-            id: this.generateId(),
-            type: 'image',
-            x: x / this.zoom(),
-            y: y / this.zoom(),
-            width: this.baseSize,
-            height: this.baseSize,
-            rotation: 0,
-            content,
-            sourceRef,
-          });
+          // Create a temporary image to get aspect ratio
+          const img = new Image();
+          img.onload = () => {
+            const aspectRatio = img.naturalHeight / img.naturalWidth || 1;
+            this.addObject({
+              id: this.generateId(),
+              type: 'image',
+              x: x / this.zoom(),
+              y: y / this.zoom(),
+              width: this.baseSize,
+              height: this.baseSize * aspectRatio,
+              rotation: 0,
+              content,
+              sourceRef,
+              originalAspectRatio: aspectRatio,
+            });
+          };
+          img.onerror = () => {
+            // Fallback to square if image fails to load
+            this.addObject({
+              id: this.generateId(),
+              type: 'image',
+              x: x / this.zoom(),
+              y: y / this.zoom(),
+              width: this.baseSize,
+              height: this.baseSize,
+              rotation: 0,
+              content,
+              sourceRef,
+              originalAspectRatio: 1,
+            });
+          };
+          img.src = content;
         };
         reader.readAsDataURL(file);
       }
@@ -157,6 +189,7 @@ export class Canvas {
         rotation: 0,
         content: text,
         sourceRef,
+        originalAspectRatio: 400 / 600,
         safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(text),
       });
       event.preventDefault();
@@ -177,22 +210,43 @@ export class Canvas {
     this.selectedObjectId.set(obj.id);
     this.scheduleHashUpdate();
   }
-
-  private generateId(): string {
-    return 'obj-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11);
+ 
+  private onKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Backspace') return;
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      return;
+    }
+    const selectedId = this.selectedObjectId();
+    if (!selectedId) return;
+    event.preventDefault();
+    
+    // Find and clean up the object from localStorage before deleting
+      this.suppressHash = true; // Suppress hash during object drag
+    const objectToDelete = this.objects().find(o => o.id === selectedId);
+    if (objectToDelete) {
+      this.cleanupObjectStorage(objectToDelete);
+    }
+    
+    this.objects.update(objects => objects.filter(o => o.id !== selectedId));
+    this.selectedObjectId.set(null);
+    this.scheduleHashUpdate();
   }
 
   protected onObjectClick(event: MouseEvent, objectId: string): void {
     event.stopPropagation();
     this.selectedObjectId.set(objectId);
   }
-
+          // this.scheduleHashUpdate(); // Removed scheduleHashUpdate in mousemove
   protected onCanvasClick(event: MouseEvent): void {
     // Deselect if clicking on canvas background (not on objects)
     const target = event.target as HTMLElement;
     const isBackgroundClick = target === event.currentTarget || 
                              target.classList.contains('dot-grid') || 
                              target.classList.contains('canvas-objects');
+        if (this.hashDirty) {
+          this.scheduleHashUpdate(); // Schedule hash update if dirty
+        }
     
     if (isBackgroundClick) {
       this.selectedObjectId.set(null);
@@ -202,6 +256,7 @@ export class Canvas {
   protected onCanvasMouseDown(event: MouseEvent): void {
     // Only pan if clicking on canvas background (not on objects)
     if (event.target === event.currentTarget || (event.target as HTMLElement).classList.contains('dot-grid')) {
+      this.suppressHash = true;
       this.selectedObjectId.set(null);
       this.isPanningCanvas = true;
       this.dragStartX = event.clientX;
@@ -217,11 +272,14 @@ export class Canvas {
         
         this.viewportX.set(this.panStartViewportX + dx);
         this.viewportY.set(this.panStartViewportY + dy);
-        this.scheduleHashUpdate();
       };
 
       const onMouseUp = () => {
         this.isPanningCanvas = false;
+        this.suppressHash = false;
+        if (this.hashDirty) {
+          this.scheduleHashUpdate();
+        }
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
       };
@@ -229,6 +287,14 @@ export class Canvas {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     }
+  }
+
+  protected onObjectMouseMove(event: MouseEvent, objectId: string): void {
+    // Cursor affordances are handled by CSS, no need for JavaScript
+  }
+
+  protected onObjectMouseLeave(event: MouseEvent): void {
+    // Cursor affordances are handled by CSS, no need for JavaScript
   }
 
   private onWheel(event: WheelEvent): void {
@@ -303,10 +369,13 @@ export class Canvas {
     if (!obj) return;
     
     this.isTransforming = true;
+    this.suppressHash = true; // Suppress during transform
     this.transformStartX = event.clientX;
     this.transformStartY = event.clientY;
     this.transformHandle = handleType;
     this.originalObject = { ...obj };
+    this.rotateStartRotation = obj.rotation;
+    this.rotateStartAngle = this.getPointerAngle(obj, event.clientX, event.clientY);
 
     const onMouseMove = (e: MouseEvent) => {
       if (!this.isTransforming || !this.originalObject) return;
@@ -314,18 +383,24 @@ export class Canvas {
       const dx = (e.clientX - this.transformStartX) / this.zoom();
       const dy = (e.clientY - this.transformStartY) / this.zoom();
       
-      if (this.transformHandle === 'rotate') {
+      if (this.transformHandle?.startsWith('rotate-')) {
+        this.handleRotate(objectId, e.clientX, e.clientY);
+      } else if (this.transformHandle === 'rotate') {
         this.handleRotate(objectId, e.clientX, e.clientY);
       } else if (this.transformHandle?.startsWith('scale-')) {
         this.handleScale(objectId, dx, dy, this.transformHandle);
       }
-        this.scheduleHashUpdate();
+        // this.scheduleHashUpdate(); // Removed continuous hash updates during transform
     };
 
     const onMouseUp = () => {
       this.isTransforming = false;
       this.originalObject = null;
       this.transformHandle = null;
+      this.suppressHash = false; // Re-enable hash writes
+      if (this.hashDirty) {
+        this.scheduleHashUpdate(); // Flush once on mouseup
+      }
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -337,15 +412,78 @@ export class Canvas {
   private handleScale(objectId: string, dx: number, dy: number, handle: string): void {
     if (!this.originalObject) return;
     
-    const scaleFactorX = handle.includes('e') ? 1 : -1;
-    const scaleFactorY = handle.includes('s') ? 1 : -1;
+    let newWidth = this.originalObject.width;
+    let newHeight = this.originalObject.height;
+    let xOffset = 0;
+    let yOffset = 0;
     
-    const newWidth = Math.max(50, this.originalObject.width + dx * scaleFactorX);
-    const newHeight = Math.max(50, this.originalObject.height + dy * scaleFactorY);
-    
-    const xOffset = handle.includes('w') ? this.originalObject.width - newWidth : 0;
-    const yOffset = handle.includes('n') ? this.originalObject.height - newHeight : 0;
-    
+    // Corner handles - scale both dimensions
+    if (handle === 'scale-nw') {
+      const scaleDelta = (-dx - dy) / 2;
+      newWidth = Math.max(50, this.originalObject.width + scaleDelta);
+      newHeight = this.originalObject.type === 'image' 
+        ? newWidth * this.originalObject.originalAspectRatio
+        : Math.max(50, this.originalObject.height + scaleDelta);
+      xOffset = this.originalObject.width - newWidth;
+      yOffset = this.originalObject.height - newHeight;
+    } else if (handle === 'scale-ne') {
+      const scaleDelta = (dx - dy) / 2;
+      newWidth = Math.max(50, this.originalObject.width + scaleDelta);
+      newHeight = this.originalObject.type === 'image' 
+        ? newWidth * this.originalObject.originalAspectRatio
+        : Math.max(50, this.originalObject.height + scaleDelta);
+      yOffset = this.originalObject.height - newHeight;
+    } else if (handle === 'scale-sw') {
+      const scaleDelta = (-dx + dy) / 2;
+      newWidth = Math.max(50, this.originalObject.width + scaleDelta);
+      newHeight = this.originalObject.type === 'image' 
+        ? newWidth * this.originalObject.originalAspectRatio
+        : Math.max(50, this.originalObject.height + scaleDelta);
+      xOffset = this.originalObject.width - newWidth;
+    } else if (handle === 'scale-se') {
+      const scaleDelta = (dx + dy) / 2;
+      newWidth = Math.max(50, this.originalObject.width + scaleDelta);
+      newHeight = this.originalObject.type === 'image' 
+        ? newWidth * this.originalObject.originalAspectRatio
+        : Math.max(50, this.originalObject.height + scaleDelta);
+    }
+    // Edge handles - scale only one dimension
+    else if (handle === 'scale-w') {
+      newWidth = Math.max(50, this.originalObject.width - dx);
+      newHeight = this.originalObject.type === 'image'
+        ? newWidth * this.originalObject.originalAspectRatio
+        : this.originalObject.height;
+      xOffset = this.originalObject.width - newWidth;
+      if (this.originalObject.type === 'image') {
+        yOffset = (this.originalObject.height - newHeight) / 2;
+      }
+    } else if (handle === 'scale-e') {
+      newWidth = Math.max(50, this.originalObject.width + dx);
+      newHeight = this.originalObject.type === 'image'
+        ? newWidth * this.originalObject.originalAspectRatio
+        : this.originalObject.height;
+      if (this.originalObject.type === 'image') {
+        yOffset = (this.originalObject.height - newHeight) / 2;
+      }
+    } else if (handle === 'scale-n') {
+      newHeight = Math.max(50, this.originalObject.height - dy);
+      newWidth = this.originalObject.type === 'image'
+        ? newHeight / this.originalObject.originalAspectRatio
+        : this.originalObject.width;
+      yOffset = this.originalObject.height - newHeight;
+      if (this.originalObject.type === 'image') {
+        xOffset = (this.originalObject.width - newWidth) / 2;
+      }
+    } else if (handle === 'scale-s') {
+      newHeight = Math.max(50, this.originalObject.height + dy);
+      newWidth = this.originalObject.type === 'image'
+        ? newHeight / this.originalObject.originalAspectRatio
+        : this.originalObject.width;
+      if (this.originalObject.type === 'image') {
+        xOffset = (this.originalObject.width - newWidth) / 2;
+      }
+    }
+
     this.objects.update(objects =>
       objects.map(o =>
         o.id === objectId
@@ -366,20 +504,22 @@ export class Canvas {
     
     const obj = this.objects().find(o => o.id === objectId);
     if (!obj) return;
-    
-    // Get center of object
-    const centerX = (obj.x + obj.width / 2) * this.zoom() + this.viewportX();
-    const centerY = (obj.y + obj.height / 2) * this.zoom() + this.viewportY();
-    
-    // Calculate angle
-    const angle = Math.atan2(clientY - centerY, clientX - centerX);
-    const degrees = angle * (180 / Math.PI);
-    
+
+    const currentAngle = this.getPointerAngle(obj, clientX, clientY);
+    const delta = currentAngle - this.rotateStartAngle;
+    const degrees = this.rotateStartRotation + delta;
+
     this.objects.update(objects =>
       objects.map(o =>
         o.id === objectId ? { ...o, rotation: degrees } : o
       )
     );
+  }
+
+  private getPointerAngle(obj: CanvasObject, clientX: number, clientY: number): number {
+    const centerX = (obj.x + obj.width / 2) * this.zoom() + this.viewportX();
+    const centerY = (obj.y + obj.height / 2) * this.zoom() + this.viewportY();
+    return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
   }
 
   protected getObjectStyle(obj: CanvasObject): { [key: string]: string } {
@@ -411,19 +551,107 @@ export class Canvas {
     };
   }
 
+  // ---- Cursor helpers ----
+
+  private normalizeAngle180(deg: number): number {
+    let a = deg % 180;
+    if (a < 0) a += 180;
+    return a;
+  }
+
+  protected getCursorForHandle(obj: CanvasObject, handle: string): string {
+    const a = this.normalizeAngle180(obj.rotation);
+    const isVertical = a >= 45 && a <= 135;
+    const isNWSE = a < 45 || a > 135;
+
+    if (handle.startsWith('scale-')) {
+      switch (handle) {
+        case 'scale-nw':
+        case 'scale-se':
+          return isNWSE ? 'nwse-resize' : 'nesw-resize';
+        case 'scale-ne':
+        case 'scale-sw':
+          return isNWSE ? 'nesw-resize' : 'nwse-resize';
+        case 'scale-w':
+        case 'scale-e':
+          // Left/right edges: width scaling; cursor flips with rotation
+          return isVertical ? 'ns-resize' : 'ew-resize';
+        case 'scale-n':
+        case 'scale-s':
+          // Top/bottom edges: height scaling; complementary to width
+          return isVertical ? 'ew-resize' : 'ns-resize';
+      }
+    }
+    return 'move';
+  }
+
+  private buildRotateCursorSvg(deg: number): string {
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g transform="rotate(${deg} 12 12)">
+<g clip-path="url(#clip0_325_17)">
+<g filter="url(#filter0_d_325_17)">
+<path d="M11 6C11.9193 6 12.8295 6.18106 13.6788 6.53284C14.5281 6.88463 15.2997 7.40024 15.9497 8.05025C16.5998 8.70026 17.1154 9.47194 17.4672 10.3212C17.8189 11.1705 18 12.0807 18 13V16H22L16 22L10 16H14V13C14 12.606 13.9224 12.2159 13.7716 11.8519C13.6209 11.488 13.3999 11.1573 13.1213 10.8787C12.8427 10.6001 12.512 10.3791 12.1481 10.2284C11.7841 10.0776 11.394 10 11 10H8V14L2 8L8 2V6H11Z" fill="white"/>
+<path d="M11 9H7V11.5L3.5 8L7 4.5L7 7H11C11.7879 7 12.5682 7.15519 13.2961 7.45672C14.0241 7.75825 14.6855 8.20021 15.2426 8.75736C15.7998 9.31451 16.2418 9.97594 16.5433 10.7039C16.8448 11.4319 17 12.2121 17 13V17L19.5 17L16 20.5L12.5 17H15V13C15 12.4747 14.8965 11.9546 14.6955 11.4693C14.4945 10.984 14.1999 10.543 13.8284 10.1716C13.457 9.80014 13.016 9.5055 12.5307 9.30448C12.0454 9.10346 11.5253 9 11 9Z" fill="black"/>
+</g>
+</g>
+<defs>
+<filter id="filter0_d_325_17" x="0.2" y="1.2" width="23.6" height="23.6" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="1"/>
+<feGaussianBlur stdDeviation="0.9"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.65 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_325_17"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_325_17" result="shape"/>
+</filter>
+<clipPath id="clip0_325_17">
+<rect width="24" height="24" fill="white"/>
+</clipPath>
+</defs>
+</g>
+</svg>`;
+    const encoded = encodeURIComponent(svg)
+      .replace(/'/g, '%27')
+      .replace(/\(/g, '%28')
+      .replace(/\)/g, '%29');
+    // Hotspot at center (12,12)
+    return `url("data:image/svg+xml;utf8,${encoded}") 12 12, auto`;
+  }
+
+  protected getRotateCursor(obj: CanvasObject, corner: 'ne' | 'nw' | 'sw' | 'se'): string {
+    const baseDegMap: Record<'ne' | 'nw' | 'sw' | 'se', number> = {
+      ne: 0,
+      nw: 90,
+      sw: 180,
+      se: 270,
+    };
+    const deg = baseDegMap[corner] + obj.rotation;
+    return this.buildRotateCursorSvg(deg);
+  }
+
   // ---- Hash sync (inflect) ----
 
   private scheduleHashUpdate(): void {
     if (!isPlatformBrowser(this.platformId)) return;
+    // If we're suppressing writes (during interaction), mark dirty and skip
+    if (this.suppressHash) {
+      this.hashDirty = true;
+      return;
+    }
     if (this.hashUpdateHandle) {
       window.clearTimeout(this.hashUpdateHandle);
     }
 
     this.hashUpdateHandle = window.setTimeout(() => {
       const hash = this.serializeStateToHash();
-      const prefixedHash = `#${hash}`;
-      this.lastSerializedHash = prefixedHash;
-      window.location.hash = prefixedHash;
+      const prefixedHash = hash ? `#${hash}` : '';
+      // Only write if changed to avoid unnecessary hashchange events
+      if (prefixedHash !== this.lastSerializedHash) {
+        window.location.hash = prefixedHash;
+        this.lastSerializedHash = prefixedHash;
+      }
+      this.hashDirty = false;
       this.hashUpdateHandle = null;
     }, this.hashThrottleMs);
   }
@@ -490,8 +718,8 @@ export class Canvas {
       const type = (flagMap.get('type') as CanvasObject['type'] | undefined) ?? 'image';
       const width = this.baseSize * ts;
       const height = width * safeRatio;
-      const content = this.resolveContent(ref, type);
-      if (!content) continue;
+      const resolved = this.resolveContent(ref, type);
+      const content = resolved ?? ref;
 
       nextObjects.push({
         id: this.generateId(),
@@ -503,6 +731,7 @@ export class Canvas {
         rotation: tr,
         content,
         sourceRef: ref,
+        originalAspectRatio: safeRatio,
         safeUrl: type === 'iframe' && this.isValidUrl(content)
           ? this.sanitizer.bypassSecurityTrustResourceUrl(content)
           : undefined,
@@ -518,20 +747,35 @@ export class Canvas {
   }
 
   private resolveContent(ref: string, type: CanvasObject['type']): string | null {
+    // Handle token-based data URLs
     if (ref.startsWith('token:')) {
       const token = ref.substring('token:'.length);
       const stored = this.readDataToken(token);
       return stored ?? null;
     }
 
+    // Try to load file-based content (dropped images)
     const fileStored = this.readFileContent(ref);
     if (fileStored) return fileStored;
 
-    if (type === 'iframe' && !this.isValidUrl(ref)) {
+    // For iframes, check if ref is a valid URL
+    if (type === 'iframe') {
+      if (this.isValidUrl(ref)) {
+        return ref;
+      }
+      // Invalid iframe URL - don't restore
       return null;
     }
 
-    return ref;
+    // For images:
+    // - If ref looks like a filename (from dropped file), we can't restore it without localStorage
+    // - If ref is a URL (http/https), we can use it
+    if (ref.startsWith('http://') || ref.startsWith('https://')) {
+      return ref;
+    }
+
+    // Filename without localStorage data - can't resolve
+    return null;
   }
 
   private parseFlags(flags?: string): Map<string, number | string> {
@@ -598,6 +842,31 @@ export class Canvas {
       return localStorage.getItem(key);
     } catch {
       return null;
+    }
+  }
+
+  private generateId(): string {
+    return 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  }
+
+  private cleanupObjectStorage(obj: CanvasObject): void {
+    // Handle file-based references (from dropped images)
+    if (obj.sourceRef && !obj.sourceRef.startsWith('token:') && !obj.sourceRef.startsWith('http')) {
+      // This is a filename reference
+      const key = this.makeFileKey(obj.sourceRef);
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // Ignore errors
+      }
+    }
+    // Handle token-based references
+    else if (obj.sourceRef?.startsWith('token:')) {
+      try {
+        localStorage.removeItem(obj.sourceRef);
+      } catch {
+        // Ignore errors
+      }
     }
   }
 }

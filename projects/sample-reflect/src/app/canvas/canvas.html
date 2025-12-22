@@ -14,7 +14,7 @@
         [class.selected]="selectedObjectId() === obj.id"
         [ngStyle]="getObjectStyle(obj)"
         (click)="onObjectClick($event, obj.id)"
-        (mousedown)="onObjectMouseDown($event, obj.id)"
+                    (mousedown)="onObjectMouseDown($event, obj.id)"
       >
         @if (obj.type === 'image') {
           <img [src]="obj.content" alt="Canvas image" class="object-content" />
@@ -27,17 +27,52 @@
         }
         
         @if (selectedObjectId() === obj.id) {
-          <div class="transform-handles">
-            @for (handle of transformHandles; track handle.type) {
-              <div 
-                class="handle"
-                [class]="'handle-' + handle.type"
-                [ngStyle]="getHandlePosition(obj, handle)"
-                [style.cursor]="handle.cursor"
-                (mousedown)="onHandleMouseDown($event, obj.id, handle.type)"
-              ></div>
-            }
-          </div>
+          <!-- Edges (1px when selected, 3px when hovered) -->
+          <div class="selection-border"></div>
+          
+          <!-- Corner handles -->
+          <div class="handle handle-corner handle-nw" 
+               [style.cursor]="getCursorForHandle(obj, 'scale-nw')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'scale-nw')"></div>
+          <div class="handle handle-corner handle-ne" 
+               [style.cursor]="getCursorForHandle(obj, 'scale-ne')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'scale-ne')"></div>
+          <div class="handle handle-corner handle-sw" 
+               [style.cursor]="getCursorForHandle(obj, 'scale-sw')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'scale-sw')"></div>
+          <div class="handle handle-corner handle-se" 
+               [style.cursor]="getCursorForHandle(obj, 'scale-se')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'scale-se')"></div>
+          
+          <!-- Edge handles for width scaling -->
+          <div class="handle handle-edge handle-w" 
+               [style.cursor]="getCursorForHandle(obj, 'scale-w')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'scale-w')"></div>
+          <div class="handle handle-edge handle-e" 
+               [style.cursor]="getCursorForHandle(obj, 'scale-e')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'scale-e')"></div>
+          
+          <!-- Edge handles for height scaling -->
+          <div class="handle handle-edge handle-n" 
+               [style.cursor]="getCursorForHandle(obj, 'scale-n')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'scale-n')"></div>
+          <div class="handle handle-edge handle-s" 
+               [style.cursor]="getCursorForHandle(obj, 'scale-s')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'scale-s')"></div>
+          
+          <!-- Rotation indicator (outside corners) -->
+          <div class="rotation-indicator rotation-nw" 
+               [style.cursor]="getRotateCursor(obj, 'nw')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'rotate-nw')"></div>
+          <div class="rotation-indicator rotation-ne" 
+               [style.cursor]="getRotateCursor(obj, 'ne')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'rotate-ne')"></div>
+          <div class="rotation-indicator rotation-sw" 
+               [style.cursor]="getRotateCursor(obj, 'sw')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'rotate-sw')"></div>
+          <div class="rotation-indicator rotation-se" 
+               [style.cursor]="getRotateCursor(obj, 'se')"
+               (mousedown)="onHandleMouseDown($event, obj.id, 'rotate-se')"></div>
         }
       </div>
     }
