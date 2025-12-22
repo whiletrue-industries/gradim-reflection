@@ -1,0 +1,15 @@
+<div class="canvas-container">
+  <canvas #canvas class="canvas"></canvas>
+  
+  <div class="zoom-controls">
+    <span class="zoom-level" aria-live="polite">{{ zoomPercentage() }}%</span>
+    <button 
+      class="reset-button" 
+      (click)="resetZoom()"
+      [disabled]="zoom() === 1.0"
+      aria-label="Reset zoom to 100%"
+    >
+      Reset
+    </button>
+  </div>
+</div>
