@@ -11,6 +11,7 @@ interface CanvasObject {
   height: number;
   rotation: number;
   content: string; // URL for image or iframe
+  sourceRef: string; // canonical ref used in hash (URL or token)
   safeUrl?: SafeResourceUrl; // Sanitized URL for iframes
 }
 
@@ -29,6 +30,13 @@ interface TransformHandle {
 export class Canvas {
   private platformId = inject(PLATFORM_ID);
   private sanitizer = inject(DomSanitizer);
+
+  private readonly baseSize = 200;
+  private readonly dataTokenPrefix = 'data-token-';
+  private readonly dataFilePrefix = 'file-data-';
+  private hashUpdateHandle: number | null = null;
+  private readonly hashThrottleMs = 80;
+  private lastSerializedHash = '';
   
   protected objects = signal<CanvasObject[]>([]);
   protected selectedObjectId = signal<string | null>(null);
@@ -43,12 +51,15 @@ export class Canvas {
   
   private isDragging = false;
   private isTransforming = false;
+  private isPanningCanvas = false;
   private dragStartX = 0;
   private dragStartY = 0;
   private transformStartX = 0;
   private transformStartY = 0;
   private transformHandle: string | null = null;
   private originalObject: CanvasObject | null = null;
+  private panStartViewportX = 0;
+  private panStartViewportY = 0;
   
   protected readonly transformHandles: TransformHandle[] = [
     { type: 'scale-nw', cursor: 'nw-resize' },
@@ -61,8 +72,25 @@ export class Canvas {
   constructor() {
     if (isPlatformBrowser(this.platformId)) {
       this.setupEventListeners();
+      this.applyHashState(window.location.hash);
+      window.addEventListener('hashchange', this.onHashChange);
+      effect(() => {
+        // Track canvas view and objects; schedule hash sync when they change.
+        this.viewportX();
+        this.viewportY();
+        this.zoom();
+        this.objects();
+        this.scheduleHashUpdate();
+      });
     }
   }
+
+  private onHashChange = (): void => {
+    if (!isPlatformBrowser(this.platformId)) return;
+    if (window.location.hash === this.lastSerializedHash) return;
+    this.applyHashState(window.location.hash);
+    this.lastSerializedHash = window.location.hash;
+  };
 
   private setupEventListeners(): void {
     // Paste event for URLs
@@ -70,6 +98,9 @@ export class Canvas {
     
     // Prevent default drag behavior
     window.addEventListener('dragover', (e) => e.preventDefault());
+    
+    // Wheel event for zooming
+    window.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
   }
 
   protected onDrop(event: DragEvent): void {
@@ -86,16 +117,19 @@ export class Canvas {
           const rect = target ? target.getBoundingClientRect() : { left: 0, top: 0 };
           const x = event.clientX - rect.left - this.viewportX();
           const y = event.clientY - rect.top - this.viewportY();
+          const content = reader.result as string;
+          const sourceRef = this.deriveSourceRef(content, file.name);
           
           this.addObject({
             id: this.generateId(),
             type: 'image',
             x: x / this.zoom(),
             y: y / this.zoom(),
-            width: 200,
-            height: 200,
+            width: this.baseSize,
+            height: this.baseSize,
             rotation: 0,
-            content: reader.result as string,
+            content,
+            sourceRef,
           });
         };
         reader.readAsDataURL(file);
@@ -112,6 +146,7 @@ export class Canvas {
     const text = event.clipboardData?.getData('text');
     if (text && this.isValidUrl(text)) {
       // Add iframe at center of viewport
+      const sourceRef = this.deriveSourceRef(text);
       this.addObject({
         id: this.generateId(),
         type: 'iframe',
@@ -121,6 +156,7 @@ export class Canvas {
         height: 400,
         rotation: 0,
         content: text,
+        sourceRef,
         safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(text),
       });
       event.preventDefault();
@@ -139,6 +175,7 @@ export class Canvas {
   private addObject(obj: CanvasObject): void {
     this.objects.update(objects => [...objects, obj]);
     this.selectedObjectId.set(obj.id);
+    this.scheduleHashUpdate();
   }
 
   private generateId(): string {
@@ -151,10 +188,71 @@ export class Canvas {
   }
 
   protected onCanvasClick(event: MouseEvent): void {
-    // Deselect if clicking on canvas background
-    if (event.target === event.currentTarget) {
+    // Deselect if clicking on canvas background (not on objects)
+    const target = event.target as HTMLElement;
+    const isBackgroundClick = target === event.currentTarget || 
+                             target.classList.contains('dot-grid') || 
+                             target.classList.contains('canvas-objects');
+    
+    if (isBackgroundClick) {
       this.selectedObjectId.set(null);
     }
+  }
+
+  protected onCanvasMouseDown(event: MouseEvent): void {
+    // Only pan if clicking on canvas background (not on objects)
+    if (event.target === event.currentTarget || (event.target as HTMLElement).classList.contains('dot-grid')) {
+      this.selectedObjectId.set(null);
+      this.isPanningCanvas = true;
+      this.dragStartX = event.clientX;
+      this.dragStartY = event.clientY;
+      this.panStartViewportX = this.viewportX();
+      this.panStartViewportY = this.viewportY();
+
+      const onMouseMove = (e: MouseEvent) => {
+        if (!this.isPanningCanvas) return;
+        
+        const dx = e.clientX - this.dragStartX;
+        const dy = e.clientY - this.dragStartY;
+        
+        this.viewportX.set(this.panStartViewportX + dx);
+        this.viewportY.set(this.panStartViewportY + dy);
+        this.scheduleHashUpdate();
+      };
+
+      const onMouseUp = () => {
+        this.isPanningCanvas = false;
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+      };
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+  }
+
+  private onWheel(event: WheelEvent): void {
+    event.preventDefault();
+    
+    const delta = event.deltaY;
+    const zoomFactor = delta > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.1, Math.min(5, this.zoom() * zoomFactor));
+    
+    // Zoom towards mouse position
+    const mouseX = event.clientX;
+    const mouseY = event.clientY;
+    
+    // Calculate the point in canvas coordinates before zoom
+    const canvasX = (mouseX - this.viewportX()) / this.zoom();
+    const canvasY = (mouseY - this.viewportY()) / this.zoom();
+    
+    // Update zoom
+    this.zoom.set(newZoom);
+    
+    // Adjust viewport to keep the point under the mouse
+    this.viewportX.set(mouseX - canvasX * newZoom);
+    this.viewportY.set(mouseY - canvasY * newZoom);
+    this.scheduleHashUpdate();
   }
 
   protected onObjectMouseDown(event: MouseEvent, objectId: string): void {
@@ -183,6 +281,7 @@ export class Canvas {
             : o
         )
       );
+        this.scheduleHashUpdate();
     };
 
     const onMouseUp = () => {
@@ -220,6 +319,7 @@ export class Canvas {
       } else if (this.transformHandle?.startsWith('scale-')) {
         this.handleScale(objectId, dx, dy, this.transformHandle);
       }
+        this.scheduleHashUpdate();
     };
 
     const onMouseUp = () => {
@@ -302,5 +402,202 @@ export class Canvas {
     };
     
     return positions[handle.type] || {};
+  }
+
+  protected getCanvasObjectsStyle(): { [key: string]: string } {
+    return {
+      transform: `translate(${this.viewportX()}px, ${this.viewportY()}px) scale(${this.zoom()})`,
+      'transform-origin': '0 0',
+    };
+  }
+
+  // ---- Hash sync (inflect) ----
+
+  private scheduleHashUpdate(): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    if (this.hashUpdateHandle) {
+      window.clearTimeout(this.hashUpdateHandle);
+    }
+
+    this.hashUpdateHandle = window.setTimeout(() => {
+      const hash = this.serializeStateToHash();
+      const prefixedHash = `#${hash}`;
+      this.lastSerializedHash = prefixedHash;
+      window.location.hash = prefixedHash;
+      this.hashUpdateHandle = null;
+    }, this.hashThrottleMs);
+  }
+
+  private serializeStateToHash(): string {
+    const parts: string[] = [];
+    parts.push(this.serializeCanvasSegment());
+    for (const obj of this.objects()) {
+      parts.push(this.serializeObjectSegment(obj));
+    }
+    return parts.join('#');
+  }
+
+  private serializeCanvasSegment(): string {
+    const x = this.roundNumber(this.viewportX());
+    const y = this.roundNumber(this.viewportY());
+    const zoom = this.roundNumber(this.zoom());
+    return `canvas/${x},${y},${zoom}`;
+  }
+
+  private serializeObjectSegment(obj: CanvasObject): string {
+    const x = this.roundNumber(obj.x);
+    const y = this.roundNumber(obj.y);
+    const scale = this.roundNumber(obj.width / this.baseSize);
+    const rotation = this.roundNumber(obj.rotation);
+    const ratio = obj.width === 0 ? 1 : obj.height / obj.width;
+    const flags = [`type:${obj.type}`, `ratio:${this.roundNumber(ratio)}`];
+    const ref = encodeURIComponent(obj.sourceRef);
+    return `${ref}/${x},${y},${scale},${rotation}/${flags.join(',')}`;
+  }
+
+  private applyHashState(hash: string): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    if (!hash || hash.length <= 1) return;
+
+    const segments = hash.substring(1).split('#').filter(Boolean);
+    if (segments.length === 0) return;
+
+    const nextObjects: CanvasObject[] = [];
+    let nextViewportX = this.viewportX();
+    let nextViewportY = this.viewportY();
+    let nextZoom = this.zoom();
+
+    for (const segment of segments) {
+      const [encodedRef, transformPart, flagsPart] = segment.split('/');
+      if (!encodedRef || !transformPart) continue;
+
+      const ref = decodeURIComponent(encodedRef);
+      if (ref === 'canvas') {
+        const [vx, vy, vz] = transformPart.split(',').map(parseFloat);
+        if (!Number.isNaN(vx)) nextViewportX = vx;
+        if (!Number.isNaN(vy)) nextViewportY = vy;
+        if (!Number.isNaN(vz)) nextZoom = Math.max(0.1, Math.min(5, vz));
+        continue;
+      }
+
+      const [tx, ty, ts, tr] = transformPart.split(',').map(parseFloat);
+      if ([tx, ty, ts, tr].some(v => Number.isNaN(v))) continue;
+
+      const flagMap = this.parseFlags(flagsPart);
+      const ratioValue = flagMap.get('ratio') ?? 1;
+      const ratio = typeof ratioValue === 'number' ? ratioValue : parseFloat(String(ratioValue));
+      const safeRatio = Number.isNaN(ratio) ? 1 : ratio;
+      const type = (flagMap.get('type') as CanvasObject['type'] | undefined) ?? 'image';
+      const width = this.baseSize * ts;
+      const height = width * safeRatio;
+      const content = this.resolveContent(ref, type);
+      if (!content) continue;
+
+      nextObjects.push({
+        id: this.generateId(),
+        type,
+        x: tx,
+        y: ty,
+        width,
+        height,
+        rotation: tr,
+        content,
+        sourceRef: ref,
+        safeUrl: type === 'iframe' && this.isValidUrl(content)
+          ? this.sanitizer.bypassSecurityTrustResourceUrl(content)
+          : undefined,
+      });
+    }
+
+    this.viewportX.set(nextViewportX);
+    this.viewportY.set(nextViewportY);
+    this.zoom.set(nextZoom);
+    this.objects.set(nextObjects);
+    this.selectedObjectId.set(null);
+    this.lastSerializedHash = hash.startsWith('#') ? hash : `#${hash}`;
+  }
+
+  private resolveContent(ref: string, type: CanvasObject['type']): string | null {
+    if (ref.startsWith('token:')) {
+      const token = ref.substring('token:'.length);
+      const stored = this.readDataToken(token);
+      return stored ?? null;
+    }
+
+    const fileStored = this.readFileContent(ref);
+    if (fileStored) return fileStored;
+
+    if (type === 'iframe' && !this.isValidUrl(ref)) {
+      return null;
+    }
+
+    return ref;
+  }
+
+  private parseFlags(flags?: string): Map<string, number | string> {
+    const map = new Map<string, number | string>();
+    if (!flags) return map;
+    for (const entry of flags.split(',')) {
+      const [k, v] = entry.split(':');
+      if (!k || v === undefined) continue;
+      const num = parseFloat(v);
+      map.set(k, Number.isNaN(num) ? v : num);
+    }
+    return map;
+  }
+
+  private deriveSourceRef(content: string, filename?: string): string {
+    if (!isPlatformBrowser(this.platformId)) return content;
+    if (content.startsWith('data:')) {
+      if (filename) {
+        const key = this.makeFileKey(filename);
+        try {
+          localStorage.setItem(key, content);
+          return filename;
+        } catch {
+          // If storage fails, fall back to token
+        }
+      }
+      const tokenized = this.createDataToken(content);
+      return tokenized;
+    }
+    return filename ?? content;
+  }
+
+  private roundNumber(value: number): number {
+    return Math.round(value * 1000) / 1000;
+  }
+
+  private createDataToken(dataUrl: string): string {
+    const token = `${this.dataTokenPrefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      localStorage.setItem(token, dataUrl);
+    } catch {
+      // Ignore storage failures; hash will carry full data URL instead
+      return dataUrl;
+    }
+    return `token:${token}`;
+  }
+
+  private readDataToken(token: string): string | null {
+    try {
+      const value = localStorage.getItem(token);
+      return value ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private makeFileKey(filename: string): string {
+    return `${this.dataFilePrefix}${filename}`;
+  }
+
+  private readFileContent(filename: string): string | null {
+    const key = this.makeFileKey(filename);
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
   }
 }

@@ -1,12 +1,13 @@
 <div 
   class="canvas-container"
   (click)="onCanvasClick($event)"
+  (mousedown)="onCanvasMouseDown($event)"
   (drop)="onDrop($event)"
   (dragover)="onDragOver($event)"
 >
   <div class="dot-grid"></div>
   
-  <div class="canvas-objects">
+  <div class="canvas-objects" [ngStyle]="getCanvasObjectsStyle()">
     @for (obj of objects(); track obj.id) {
       <div 
         class="canvas-object"
@@ -43,6 +44,6 @@
   </div>
   
   <div class="canvas-instructions">
-    <p>Drag and drop images here or paste URLs (Ctrl/Cmd+V)</p>
+    <p>Drag and drop images here • Paste URLs (Ctrl/Cmd+V) • Drag canvas to pan • Scroll to zoom</p>
   </div>
 </div>
