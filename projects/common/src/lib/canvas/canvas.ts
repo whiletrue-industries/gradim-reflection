@@ -8,6 +8,8 @@ import {
   computed,
   PLATFORM_ID,
   inject,
+  AfterViewInit,
+  OnDestroy,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
@@ -21,12 +23,15 @@ import { isPlatformBrowser } from '@angular/common';
     '(wheel)': 'onWheel($event)',
   },
 })
-export class Canvas {
+export class Canvas implements AfterViewInit, OnDestroy {
   private platformId = inject(PLATFORM_ID);
   private canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private animationFrameId: number | null = null;
+  private resizeHandler: (() => void) | null = null;
 
-  // Zoom state
+  // Zoom configuration
+  private readonly MIN_ZOOM = 0.1;
+  private readonly MAX_ZOOM = 10;
   protected readonly zoom = signal(1.0);
   protected readonly zoomPercentage = computed(() => Math.round(this.zoom() * 100));
 
@@ -34,7 +39,14 @@ export class Canvas {
   private readonly baseGridSize = 20; // Base grid size in pixels at 100% zoom
   private readonly dotRadius = 1;
   private readonly dotColor = '#CCCCCC';
-  private readonly fadeRange = 0.3; // Range for fade effect (0.3 = 30% of scale transition)
+  private readonly dotColorRgb = this.hexToRgb(this.dotColor); // Cached RGB values
+  private readonly gridScales = [0.1, 0.5, 1, 2, 5, 10]; // Multiple scales for smooth transitions
+
+  // Grid size limits and fade thresholds
+  private readonly MIN_GRID_SIZE = 5;
+  private readonly MAX_GRID_SIZE = 200;
+  private readonly FADE_IN_THRESHOLD = 15; // Start fading in at this size
+  private readonly FADE_OUT_THRESHOLD = 100; // Start fading out at this size
 
   constructor() {
     // Only run in browser
@@ -46,9 +58,8 @@ export class Canvas {
       });
 
       // Handle window resize
-      if (typeof window !== 'undefined') {
-        window.addEventListener('resize', () => this.handleResize());
-      }
+      this.resizeHandler = () => this.handleResize();
+      window.addEventListener('resize', this.resizeHandler);
     }
   }
 
@@ -63,6 +74,11 @@ export class Canvas {
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
     }
+    
+    // Remove resize listener
+    if (isPlatformBrowser(this.platformId) && this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+    }
   }
 
   private setupCanvas(): void {
@@ -71,9 +87,21 @@ export class Canvas {
 
     if (!container) return;
 
-    // Set canvas size to match container
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
+    // Set canvas size to match container, accounting for device pixel ratio
+    const dpr = window.devicePixelRatio || 1;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    // Scale context to account for device pixel ratio
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.scale(dpr, dpr);
+    }
   }
 
   private handleResize(): void {
@@ -87,7 +115,7 @@ export class Canvas {
     const delta = event.deltaY;
     const zoomFactor = delta > 0 ? 0.9 : 1.1;
 
-    const newZoom = Math.max(0.1, Math.min(10, this.zoom() * zoomFactor));
+    const newZoom = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, this.zoom() * zoomFactor));
     this.zoom.set(newZoom);
   }
 
@@ -112,38 +140,44 @@ export class Canvas {
 
     if (!ctx) return;
 
+    // Get container dimensions (for logical pixels)
+    const container = canvas.parentElement;
+    if (!container) return;
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
     // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, width, height);
 
     const currentZoom = this.zoom();
 
-    // Calculate the appropriate grid scales to show
-    // We show multiple scales with fade in/out effect
-    const scales = [0.1, 0.5, 1, 2, 5, 10];
-
-    for (const scale of scales) {
+    // Iterate through grid scales for smooth multi-scale rendering
+    for (const scale of this.gridScales) {
       const gridSize = this.baseGridSize * scale * currentZoom;
 
       // Skip if grid is too small or too large
-      if (gridSize < 5 || gridSize > 200) continue;
+      if (gridSize < this.MIN_GRID_SIZE || gridSize > this.MAX_GRID_SIZE) continue;
 
       // Calculate opacity based on grid size (fade in/out effect)
       let opacity = 1;
 
-      // Fade out when too small
-      if (gridSize < 15) {
-        opacity = (gridSize - 5) / 10; // Fade from 5 to 15
+      // Fade in when grid is small
+      if (gridSize < this.FADE_IN_THRESHOLD) {
+        const fadeRange = this.FADE_IN_THRESHOLD - this.MIN_GRID_SIZE;
+        opacity = (gridSize - this.MIN_GRID_SIZE) / fadeRange;
       }
-      // Fade out when too large
-      else if (gridSize > 100) {
-        opacity = (200 - gridSize) / 100; // Fade from 100 to 200
+      // Fade out when grid is large
+      else if (gridSize > this.FADE_OUT_THRESHOLD) {
+        const fadeRange = this.MAX_GRID_SIZE - this.FADE_OUT_THRESHOLD;
+        opacity = (this.MAX_GRID_SIZE - gridSize) / fadeRange;
       }
 
       // Ensure opacity is in valid range
       opacity = Math.max(0, Math.min(1, opacity));
 
       if (opacity > 0) {
-        this.drawDotsAtScale(ctx, canvas.width, canvas.height, gridSize, opacity);
+        this.drawDotsAtScale(ctx, width, height, gridSize, opacity);
       }
     }
   }
@@ -159,9 +193,9 @@ export class Canvas {
     const startX = (width % gridSize) / 2;
     const startY = (height % gridSize) / 2;
 
-    // Parse the dot color and add opacity
-    const rgb = this.hexToRgb(this.dotColor);
-    ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+    // Use cached RGB values with opacity
+    const { r, g, b } = this.dotColorRgb;
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
 
     // Draw dots
     for (let x = startX; x < width; x += gridSize) {
@@ -174,6 +208,11 @@ export class Canvas {
   }
 
   private hexToRgb(hex: string): { r: number; g: number; b: number } {
+    // Validate input
+    if (!hex || typeof hex !== 'string') {
+      return { r: 0, g: 0, b: 0 };
+    }
+
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
       ? {
