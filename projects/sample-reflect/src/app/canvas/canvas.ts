@@ -508,10 +508,11 @@ export class Canvas {
     const currentAngle = this.getPointerAngle(obj, clientX, clientY);
     const delta = currentAngle - this.rotateStartAngle;
     const degrees = this.rotateStartRotation + delta;
+    const snapped = this.snapAngleWithin(degrees, 45, 2);
 
     this.objects.update(objects =>
       objects.map(o =>
-        o.id === objectId ? { ...o, rotation: degrees } : o
+        o.id === objectId ? { ...o, rotation: snapped } : o
       )
     );
   }
@@ -530,6 +531,16 @@ export class Canvas {
       height: `${obj.height}px`,
       transform: `rotate(${obj.rotation}deg)`,
     };
+  }
+
+  private snapAngle(angle: number, step: number = 45): number {
+    return Math.round(angle / step) * step;
+  }
+
+  // Snap only when within a small threshold of the nearest step
+  private snapAngleWithin(angle: number, step: number = 45, thresholdDeg: number = 2): number {
+    const nearest = Math.round(angle / step) * step;
+    return Math.abs(angle - nearest) <= thresholdDeg ? nearest : angle;
   }
 
   protected getHandlePosition(obj: CanvasObject, handle: TransformHandle): { [key: string]: string } {
