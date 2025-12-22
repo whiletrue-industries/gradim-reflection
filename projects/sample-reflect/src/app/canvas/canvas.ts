@@ -620,11 +620,12 @@ export class Canvas {
   }
 
   protected getRotateCursor(obj: CanvasObject, corner: 'ne' | 'nw' | 'sw' | 'se'): string {
+    // Corrected corner base angles: NW and SE swapped
     const baseDegMap: Record<'ne' | 'nw' | 'sw' | 'se', number> = {
       ne: 0,
-      nw: 90,
+      nw: 270,
       sw: 180,
-      se: 270,
+      se: 90,
     };
     const deg = baseDegMap[corner] + obj.rotation;
     return this.buildRotateCursorSvg(deg);
