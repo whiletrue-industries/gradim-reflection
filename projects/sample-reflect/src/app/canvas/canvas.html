@@ -22,7 +22,9 @@
           <iframe 
             [src]="obj.safeUrl || obj.content" 
             class="object-content"
+                              scrolling="no"
             sandbox="allow-scripts allow-same-origin allow-forms"
+                              (load)="onIframeLoad($event, obj.id)"
           ></iframe>
         }
         

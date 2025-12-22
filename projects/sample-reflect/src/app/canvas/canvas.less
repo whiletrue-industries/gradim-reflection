@@ -63,6 +63,15 @@
     display: block;
     border: none;
   }
+
+  // Hide scrollbars on embedded iframes
+  iframe.object-content {
+    overflow: hidden;
+    scrollbar-width: none; /* Firefox */
+  }
+  iframe.object-content::-webkit-scrollbar { /* WebKit */
+    display: none;
+  }
   
   // Selection border - 1px when selected, 3px on hover
   .selection-border {

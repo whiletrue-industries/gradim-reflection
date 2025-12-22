@@ -40,6 +40,11 @@ export class Canvas {
   private lastSerializedHash = '';
   private suppressHash = false; // suppress hash writes during interactions
   private hashDirty = false;    // track pending changes while suppressed
+  private wheelFlushHandle: number | null = null; // debounce wheel flush
+  private ephemeralTokens = new Map<string, string>(); // in-memory fallback for tokens
+  // 1x1 transparent PNG to keep image objects alive when content can't resolve yet
+  private readonly transparentPixel =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/hsrLxkAAAAASUVORK5CYII=';
   
   protected objects = signal<CanvasObject[]>([]);
   protected selectedObjectId = signal<string | null>(null);
@@ -299,6 +304,8 @@ export class Canvas {
 
   private onWheel(event: WheelEvent): void {
     event.preventDefault();
+    // Suppress hash during rapid wheel zoom; flush after debounce
+    this.suppressHash = true;
     
     const delta = event.deltaY;
     const zoomFactor = delta > 0 ? 0.9 : 1.1;
@@ -318,7 +325,17 @@ export class Canvas {
     // Adjust viewport to keep the point under the mouse
     this.viewportX.set(mouseX - canvasX * newZoom);
     this.viewportY.set(mouseY - canvasY * newZoom);
-    this.scheduleHashUpdate();
+    // Debounce flush after wheel ends
+    if (this.wheelFlushHandle) {
+      window.clearTimeout(this.wheelFlushHandle);
+    }
+    this.wheelFlushHandle = window.setTimeout(() => {
+      this.suppressHash = false;
+      if (this.hashDirty) {
+        this.scheduleHashUpdate();
+      }
+      this.wheelFlushHandle = null;
+    }, 150);
   }
 
   protected onObjectMouseDown(event: MouseEvent, objectId: string): void {
@@ -329,6 +346,7 @@ export class Canvas {
     if (!obj) return;
     
     this.isDragging = true;
+    this.suppressHash = true; // Suppress hash writes during drag; flush on mouseup
     this.dragStartX = event.clientX;
     this.dragStartY = event.clientY;
     this.originalObject = { ...obj };
@@ -347,12 +365,15 @@ export class Canvas {
             : o
         )
       );
-        this.scheduleHashUpdate();
     };
 
     const onMouseUp = () => {
       this.isDragging = false;
       this.originalObject = null;
+      this.suppressHash = false;
+      if (this.hashDirty) {
+        this.scheduleHashUpdate(); // Flush once after drag ends
+      }
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -562,6 +583,27 @@ export class Canvas {
     };
   }
 
+  // Attempt to hide scrollbars inside same-origin iframes by injecting CSS
+  protected onIframeLoad(event: Event, objectId: string): void {
+    const iframe = event.target as HTMLIFrameElement | null;
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document || null;
+      if (!doc) return;
+      if (doc.documentElement) {
+        (doc.documentElement as HTMLElement).style.overflow = 'hidden';
+      }
+      if (doc.body) {
+        doc.body.style.overflow = 'hidden';
+      }
+      const style = doc.createElement('style');
+      style.textContent = '::-webkit-scrollbar{display:none} html,body{overflow:hidden!important}';
+      doc.head?.appendChild(style);
+    } catch {
+      // Cross-origin: cannot access; rely on outer CSS and scrolling="no"
+    }
+  }
+
   // ---- Cursor helpers ----
 
   private normalizeAngle180(deg: number): number {
@@ -730,8 +772,15 @@ export class Canvas {
       const type = (flagMap.get('type') as CanvasObject['type'] | undefined) ?? 'image';
       const width = this.baseSize * ts;
       const height = width * safeRatio;
-      const resolved = this.resolveContent(ref, type);
-      const content = resolved ?? ref;
+      let content = this.resolveContent(ref, type);
+      if (!content) {
+        // Keep image objects present with a transparent placeholder; skip invalid iframes
+        if (type === 'image') {
+          content = this.transparentPixel;
+        } else {
+          continue;
+        }
+      }
 
       nextObjects.push({
         id: this.generateId(),
@@ -806,12 +855,13 @@ export class Canvas {
     if (!isPlatformBrowser(this.platformId)) return content;
     if (content.startsWith('data:')) {
       if (filename) {
+        // Store under a stable file-key and reference by filename in hash
         const key = this.makeFileKey(filename);
         try {
           localStorage.setItem(key, content);
           return filename;
         } catch {
-          // If storage fails, fall back to token
+          // If storage fails, fall back to token storage
         }
       }
       const tokenized = this.createDataToken(content);
@@ -829,8 +879,8 @@ export class Canvas {
     try {
       localStorage.setItem(token, dataUrl);
     } catch {
-      // Ignore storage failures; hash will carry full data URL instead
-      return dataUrl;
+      // Fallback: store only in-memory; do NOT leak data URL into hash
+      this.ephemeralTokens.set(token, dataUrl);
     }
     return `token:${token}`;
   }
@@ -838,10 +888,11 @@ export class Canvas {
   private readDataToken(token: string): string | null {
     try {
       const value = localStorage.getItem(token);
-      return value ?? null;
+      if (value) return value;
     } catch {
-      return null;
+      // ignore and try memory fallback
     }
+    return this.ephemeralTokens.get(token) ?? null;
   }
 
   private makeFileKey(filename: string): string {
@@ -874,11 +925,13 @@ export class Canvas {
     }
     // Handle token-based references
     else if (obj.sourceRef?.startsWith('token:')) {
+      const tokenId = obj.sourceRef.substring('token:'.length);
       try {
-        localStorage.removeItem(obj.sourceRef);
+        localStorage.removeItem(tokenId);
       } catch {
         // Ignore errors
       }
+      this.ephemeralTokens.delete(tokenId);
     }
   }
 }
