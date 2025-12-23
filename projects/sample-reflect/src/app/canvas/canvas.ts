@@ -57,6 +57,29 @@ export class Canvas {
   protected viewportY = signal(0);
   protected zoom = signal(1);
   
+  // Grid constants
+  private readonly baseGridSize = 20; // Base grid size at 100% zoom
+  private readonly gridScaleLevels = [0.25, 0.5, 1, 2, 4, 8, 16]; // Available grid scales
+  private readonly minVisibleGridSize = 8; // Min px before fading out
+  private readonly maxVisibleGridSize = 50; // Max px before fading out
+  
+  // Grid state
+  protected gridScale = signal(1); // Current grid scale multiplier
+  
+  // Computed properties for grid and zoom display
+  protected gridSize = computed(() => this.baseGridSize * this.gridScale());
+  protected apparentGridSize = computed(() => this.gridSize() * this.zoom());
+  protected gridOpacity = computed(() => {
+    const apparent = this.apparentGridSize();
+    if (apparent < this.minVisibleGridSize) {
+      return Math.max(0, apparent / this.minVisibleGridSize);
+    } else if (apparent > this.maxVisibleGridSize) {
+      return Math.max(0, 1 - (apparent - this.maxVisibleGridSize) / (this.maxVisibleGridSize * 0.5));
+    }
+    return 1;
+  });
+  protected zoomPercentage = computed(() => Math.round(this.zoom() * 100));
+  
   private isDragging = false;
   private isTransforming = false;
   private isPanningCanvas = false;
@@ -96,6 +119,11 @@ export class Canvas {
         this.zoom();
         this.objects();
         this.scheduleHashUpdate();
+      });
+      effect(() => {
+        // Update grid scale when zoom changes
+        const currentZoom = this.zoom();
+        this.updateGridScale(currentZoom);
       });
     }
   }
@@ -300,6 +328,32 @@ export class Canvas {
 
   protected onObjectMouseLeave(event: MouseEvent): void {
     // Cursor affordances are handled by CSS, no need for JavaScript
+  }
+
+  private updateGridScale(zoom: number): void {
+    // Find the best grid scale for current zoom level
+    // Goal: keep apparent grid size between minVisibleGridSize and maxVisibleGridSize
+    let bestScale = this.gridScaleLevels[0];
+    let bestDiff = Infinity;
+    
+    for (const scale of this.gridScaleLevels) {
+      const apparentSize = this.baseGridSize * scale * zoom;
+      const targetSize = (this.minVisibleGridSize + this.maxVisibleGridSize) / 2;
+      const diff = Math.abs(apparentSize - targetSize);
+      
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestScale = scale;
+      }
+    }
+    
+    this.gridScale.set(bestScale);
+  }
+
+  protected resetZoom(): void {
+    this.zoom.set(1);
+    this.viewportX.set(0);
+    this.viewportY.set(0);
   }
 
   private onWheel(event: WheelEvent): void {
@@ -580,6 +634,14 @@ export class Canvas {
     return {
       transform: `translate(${this.viewportX()}px, ${this.viewportY()}px) scale(${this.zoom()})`,
       'transform-origin': '0 0',
+    };
+  }
+
+  protected getDotGridStyle(): { [key: string]: string } {
+    const size = this.gridSize();
+    return {
+      'background-size': `${size}px ${size}px`,
+      'opacity': this.gridOpacity().toString(),
     };
   }
 

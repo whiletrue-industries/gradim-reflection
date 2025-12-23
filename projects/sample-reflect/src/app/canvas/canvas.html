@@ -5,7 +5,7 @@
   (drop)="onDrop($event)"
   (dragover)="onDragOver($event)"
 >
-  <div class="dot-grid"></div>
+  <div class="dot-grid" [ngStyle]="getDotGridStyle()"></div>
   
   <div class="canvas-objects" [ngStyle]="getCanvasObjectsStyle()">
     @for (obj of objects(); track obj.id) {
@@ -78,6 +78,11 @@
         }
       </div>
     }
+  </div>
+  
+  <div class="zoom-controls">
+    <div class="zoom-counter">{{ zoomPercentage() }}%</div>
+    <button class="zoom-reset" (click)="resetZoom()">Reset</button>
   </div>
   
   <div class="canvas-instructions">
