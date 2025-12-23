@@ -639,8 +639,12 @@ export class Canvas {
 
   protected getDotGridStyle(): { [key: string]: string } {
     const size = this.gridSize();
+    const scaledSize = size * this.zoom();
+    const offsetX = this.viewportX() % scaledSize;
+    const offsetY = this.viewportY() % scaledSize;
     return {
-      'background-size': `${size}px ${size}px`,
+      'background-size': `${scaledSize}px ${scaledSize}px`,
+      'background-position': `${offsetX}px ${offsetY}px`,
       'opacity': this.gridOpacity().toString(),
     };
   }
