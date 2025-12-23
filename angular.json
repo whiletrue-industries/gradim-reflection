@@ -77,6 +77,10 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4200,
+            "host": "0.0.0.0"
+          },
           "configurations": {
             "production": {
               "buildTarget": "main:build:production"
@@ -184,6 +188,10 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4201,
+            "host": "0.0.0.0"
+          },
           "configurations": {
             "production": {
               "buildTarget": "sample-reflect:build:production"
