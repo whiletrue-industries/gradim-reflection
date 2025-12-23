@@ -85,10 +85,24 @@
     &.interactive {
       pointer-events: auto;
       opacity: 1;
+      overflow: auto !important;
+      scrollbar-width: auto; /* Show scrollbars in Firefox */
     }
   }
   iframe.object-content::-webkit-scrollbar { /* WebKit */
     display: none;
+  }
+  iframe.object-content.interactive::-webkit-scrollbar { /* Show scrollbars in WebKit when interactive */
+    display: block;
+    width: 12px; /* Make scrollbar visible */
+    height: 12px;
+  }
+  iframe.object-content.interactive::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+  }
+  iframe.object-content.interactive::-webkit-scrollbar-track {
+    background-color: rgba(0, 0, 0, 0.1);
   }
   
   // Overlay that appears when iframe is hovered

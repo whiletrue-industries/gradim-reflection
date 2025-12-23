@@ -30,7 +30,7 @@
               class="object-content"
               [class.dimmed]="hoveredIframeId() === obj.id"
               [class.interactive]="interactiveIframeId() === obj.id"
-              scrolling="no"
+              [attr.scrolling]="interactiveIframeId() === obj.id ? 'yes' : 'no'"
               sandbox="allow-scripts allow-same-origin allow-forms"
               (load)="onIframeLoad($event, obj.id)"
             ></iframe>
