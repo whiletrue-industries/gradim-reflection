@@ -1,29 +1,4 @@
-<lib-layout>
-  <h1>{{ title() }}</h1>
-  <p>This is the sample-reflect application.</p>
-  
-  <div class="image-upload-section">
-    <label for="imageUpload" class="upload-button" tabindex="0">
-      Upload Image
-      <input 
-        type="file" 
-        id="imageUpload" 
-        accept="image/*" 
-        (change)="onImageSelected($event)"
-        aria-label="Upload an image file"
-      />
-    </label>
-    
-    @if (uploadedImageUrl()) {
-      <div class="image-container">
-        <img 
-          [src]="uploadedImageUrl()" 
-          alt="Uploaded image"
-          class="uploaded-image"
-        />
-      </div>
-    }
-  </div>
-  
+<lib-layout [fullScreen]="true">
+  <app-canvas></app-canvas>
   <router-outlet />
 </lib-layout>

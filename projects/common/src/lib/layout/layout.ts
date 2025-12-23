@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, PLATFORM_ID, signal, effect } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, PLATFORM_ID, signal, effect, input } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
 @Component({
@@ -8,10 +8,14 @@ import { isPlatformBrowser } from '@angular/common';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '[class.is-iframe]': 'isInIframe()',
+    '[class.full-screen]': 'fullScreen()',
   }
 })
 export class Layout {
   private platformId = inject(PLATFORM_ID);
+  
+  // Input to enable full-screen mode
+  fullScreen = input(false);
 
   // Signal to track if the app is running inside an iframe
   protected isInIframe = signal(false);
