@@ -324,9 +324,16 @@ export class Canvas {
     this.scheduleHashUpdate();
   }
 
-  // Development helper: manually set og:image for testing
-  // Usage in browser console: window.ng.getComponent(document.querySelector('app-canvas')).setOgImageForTesting('https://example.com/image.jpg')
+  // Development helper: manually set og:image for testing (only available in dev builds)
+  // Usage: Enable Angular DevTools, then in console: ng.getComponent($0).setOgImageForTesting('url')
+  // Or inject via Angular debug: const comp = document.querySelector('app-canvas'); ng.getComponent(comp).setOgImageForTesting('url')
   public setOgImageForTesting(ogImageUrl: string): void {
+    // Validate URL format
+    if (!this.isValidUrl(ogImageUrl)) {
+      console.error('Invalid URL format:', ogImageUrl);
+      return;
+    }
+    
     const selectedId = this.selectedObjectId();
     if (!selectedId) {
       console.warn('No object selected. Please select an iframe object first.');
