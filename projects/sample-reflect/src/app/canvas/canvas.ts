@@ -61,6 +61,7 @@ export class Canvas {
   protected hoveredIframeId = signal<string | null>(null);
   protected interactiveIframeId = signal<string | null>(null);
   private hoverTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  private iframeScrollUpdateMap = new WeakMap<HTMLIFrameElement, () => void>();
   
   // Grid constants
   private readonly baseGridSize = 20; // Base grid size at 100% zoom
@@ -281,15 +282,7 @@ export class Canvas {
       this.interactiveIframeId.set(null);
       
       // Update iframe scroll state for same-origin iframes
-      setTimeout(() => {
-        const iframeElements = document.querySelectorAll('iframe.object-content');
-        iframeElements.forEach((iframe: Element) => {
-          const iframeEl = iframe as any;
-          if (iframeEl._updateScroll) {
-            iframeEl._updateScroll();
-          }
-        });
-      }, 0);
+      this.updateAllIframeScrollStates();
     }
   }
           // this.scheduleHashUpdate(); // Removed scheduleHashUpdate in mousemove
@@ -309,15 +302,7 @@ export class Canvas {
       this.interactiveIframeId.set(null);
       
       // Update iframe scroll state for same-origin iframes
-      setTimeout(() => {
-        const iframeElements = document.querySelectorAll('iframe.object-content');
-        iframeElements.forEach((iframe: Element) => {
-          const iframeEl = iframe as any;
-          if (iframeEl._updateScroll) {
-            iframeEl._updateScroll();
-          }
-        });
-      }, 0);
+      this.updateAllIframeScrollStates();
     }
   }
 
@@ -365,6 +350,20 @@ export class Canvas {
     // Cursor affordances are handled by CSS, no need for JavaScript
   }
 
+  private updateAllIframeScrollStates(): void {
+    // Update scroll state for all iframes based on their interactive state
+    setTimeout(() => {
+      const iframeElements = document.querySelectorAll('iframe.object-content');
+      iframeElements.forEach((iframe: Element) => {
+        const iframeEl = iframe as HTMLIFrameElement;
+        const updateFn = this.iframeScrollUpdateMap.get(iframeEl);
+        if (updateFn) {
+          updateFn();
+        }
+      });
+    }, 0);
+  }
+
   private clearHoverTimeout(): void {
     if (this.hoverTimeoutHandle) {
       clearTimeout(this.hoverTimeoutHandle);
@@ -406,18 +405,7 @@ export class Canvas {
     this.clearHoverTimeout();
     
     // Update iframe scroll state for same-origin iframes
-    setTimeout(() => {
-      const obj = this.objects().find(o => o.id === objectId);
-      if (obj?.type === 'iframe') {
-        const iframeElements = document.querySelectorAll('iframe.object-content');
-        iframeElements.forEach((iframe: Element) => {
-          const iframeEl = iframe as any;
-          if (iframeEl._updateScroll) {
-            iframeEl._updateScroll();
-          }
-        });
-      }
-    }, 0);
+    this.updateAllIframeScrollStates();
   }
 
   private updateGridScale(zoom: number): void {
@@ -797,8 +785,8 @@ export class Canvas {
     // Initial update
     updateIframeScroll();
     
-    // Store the update function for this iframe so we can call it when interactive state changes
-    (iframe as any)._updateScroll = updateIframeScroll;
+    // Store the update function in WeakMap for later use
+    this.iframeScrollUpdateMap.set(iframe, updateIframeScroll);
   }
 
   // ---- Cursor helpers ----
