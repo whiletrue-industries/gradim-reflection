@@ -16,7 +16,7 @@ const angularApp = new AngularNodeAppEngine();
  * API endpoint to fetch URL metadata (og:image, etc.)
  */
 app.get('/api/url-metadata', async (req, res) => {
-  const url = req.query.url as string;
+  const url = req.query['url'] as string;
   
   if (!url) {
     return res.status(400).json({ error: 'URL parameter is required' });
@@ -42,10 +42,10 @@ app.get('/api/url-metadata', async (req, res) => {
     
     const ogImage = ogImageMatch ? ogImageMatch[1] : null;
 
-    res.json({ ogImage });
+    return res.json({ ogImage });
   } catch (error) {
     console.error('Error fetching URL metadata:', error);
-    res.status(500).json({ error: 'Failed to fetch URL metadata' });
+    return res.status(500).json({ error: 'Failed to fetch URL metadata' });
   }
 });
 
