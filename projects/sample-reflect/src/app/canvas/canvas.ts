@@ -649,6 +649,21 @@ export class Canvas {
     };
   }
 
+  protected getInverseScaleStyle(obj: CanvasObject): { [key: string]: string } {
+    const inverseScale = 1 / this.zoom();
+    return {
+      transform: `scale(${inverseScale})`,
+      '--inverse-scale': inverseScale.toString(),
+    };
+  }
+
+  protected getSelectionBorderStyle(): { [key: string]: string } {
+    const inverseScale = 1 / this.zoom();
+    return {
+      '--inverse-scale': inverseScale.toString(),
+    };
+  }
+
   // Attempt to hide scrollbars inside same-origin iframes by injecting CSS
   protected onIframeLoad(event: Event, objectId: string): void {
     const iframe = event.target as HTMLIFrameElement | null;
