@@ -22,6 +22,29 @@ app.get('/api/url-metadata', async (req, res) => {
     return res.status(400).json({ error: 'URL parameter is required' });
   }
 
+  // Validate URL format and restrict to HTTP/HTTPS only
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return res.status(400).json({ error: 'Only HTTP and HTTPS URLs are allowed' });
+    }
+    
+    // Block localhost, private IPs, and internal networks to prevent SSRF
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname.startsWith('127.') ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('10.') ||
+      hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./)
+    ) {
+      return res.status(400).json({ error: 'Cannot fetch from internal/private networks' });
+    }
+  } catch (error) {
+    return res.status(400).json({ error: 'Invalid URL format' });
+  }
+
   try {
     // Fetch the URL
     const response = await fetch(url, {

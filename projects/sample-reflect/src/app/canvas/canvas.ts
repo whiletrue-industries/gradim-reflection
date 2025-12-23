@@ -275,9 +275,11 @@ export class Canvas {
           if (data.ogImage) {
             this.updateObjectOgImage(objectId, data.ogImage);
           }
+        } else {
+          console.error(`Failed to fetch og:image from server: ${response.status} ${response.statusText}`);
         }
       } catch (serverError) {
-        console.log('Could not fetch og:image from server endpoint:', serverError);
+        console.error('Could not fetch og:image from server endpoint:', serverError);
       }
     }
   }
