@@ -65,13 +65,62 @@
     border: none;
   }
 
+  // Wrapper for iframes to handle hover/interaction state
+  .iframe-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
   // Hide scrollbars on embedded iframes
   iframe.object-content {
     overflow: hidden;
     scrollbar-width: none; /* Firefox */
+    transition: opacity 0.2s ease-in-out;
+    
+    &.dimmed {
+      opacity: 0.4;
+    }
+    
+    &.interactive {
+      pointer-events: auto;
+      opacity: 1;
+    }
   }
   iframe.object-content::-webkit-scrollbar { /* WebKit */
     display: none;
+  }
+  
+  // Overlay that appears when iframe is hovered
+  .iframe-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1;
+    pointer-events: auto;
+    
+    .iframe-overlay-message {
+      background-color: rgba(255, 255, 255, 0.95);
+      color: #333;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+      user-select: none;
+      transition: transform 0.1s ease;
+      
+      &:hover {
+        transform: scale(1.05);
+      }
+    }
   }
   
   // Selection border - scales width inversely with zoom

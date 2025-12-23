@@ -57,6 +57,11 @@ export class Canvas {
   protected viewportY = signal(0);
   protected zoom = signal(1);
   
+  // Iframe interaction state
+  protected hoveredIframeId = signal<string | null>(null);
+  protected interactiveIframeId = signal<string | null>(null);
+  private hoverTimeoutHandle: number | null = null;
+  
   // Grid constants
   private readonly baseGridSize = 20; // Base grid size at 100% zoom
   private readonly gridScaleLevels = [0.25, 0.5, 1, 2, 4, 8, 16]; // Available grid scales
@@ -269,6 +274,12 @@ export class Canvas {
   protected onObjectClick(event: MouseEvent, objectId: string): void {
     event.stopPropagation();
     this.selectedObjectId.set(objectId);
+    
+    // Reset interactive iframe when clicking on a different object
+    const clickedObj = this.objects().find(o => o.id === objectId);
+    if (clickedObj?.type !== 'iframe' || this.interactiveIframeId() !== objectId) {
+      this.interactiveIframeId.set(null);
+    }
   }
           // this.scheduleHashUpdate(); // Removed scheduleHashUpdate in mousemove
   protected onCanvasClick(event: MouseEvent): void {
@@ -283,6 +294,8 @@ export class Canvas {
     
     if (isBackgroundClick) {
       this.selectedObjectId.set(null);
+      // Reset interactive iframe when clicking outside
+      this.interactiveIframeId.set(null);
     }
   }
 
@@ -328,6 +341,48 @@ export class Canvas {
 
   protected onObjectMouseLeave(event: MouseEvent): void {
     // Cursor affordances are handled by CSS, no need for JavaScript
+  }
+
+  protected onIframeMouseEnter(objectId: string): void {
+    // Clear any existing timeout
+    if (this.hoverTimeoutHandle) {
+      window.clearTimeout(this.hoverTimeoutHandle);
+    }
+    
+    // Set timeout to dim after 500ms
+    this.hoverTimeoutHandle = window.setTimeout(() => {
+      // Only dim if this iframe is not already in interactive mode
+      if (this.interactiveIframeId() !== objectId) {
+        this.hoveredIframeId.set(objectId);
+      }
+    }, 500);
+  }
+
+  protected onIframeMouseLeave(objectId: string): void {
+    // Clear the hover timeout
+    if (this.hoverTimeoutHandle) {
+      window.clearTimeout(this.hoverTimeoutHandle);
+      this.hoverTimeoutHandle = null;
+    }
+    
+    // Clear hover state
+    if (this.hoveredIframeId() === objectId) {
+      this.hoveredIframeId.set(null);
+    }
+  }
+
+  protected onIframeOverlayClick(event: MouseEvent, objectId: string): void {
+    event.stopPropagation();
+    
+    // Enable interaction for this iframe
+    this.interactiveIframeId.set(objectId);
+    this.hoveredIframeId.set(null);
+    
+    // Clear any hover timeout
+    if (this.hoverTimeoutHandle) {
+      window.clearTimeout(this.hoverTimeoutHandle);
+      this.hoverTimeoutHandle = null;
+    }
   }
 
   private updateGridScale(zoom: number): void {
