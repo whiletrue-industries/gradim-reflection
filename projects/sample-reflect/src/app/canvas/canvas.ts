@@ -250,8 +250,9 @@ export class Canvas {
   private async fetchOgImage(url: string, objectId: string): Promise<void> {
     if (!isPlatformBrowser(this.platformId)) return;
     
+    // Only try server-side endpoint - client-side CORS fetch fails for most sites
+    // and generates noisy console errors that confuse users
     try {
-      // Try server-side endpoint first (works in SSR mode)
       const response = await fetch(`/api/url-metadata?url=${encodeURIComponent(url)}`);
       
       // Check if we got a valid JSON response (not HTML 404)
@@ -260,33 +261,11 @@ export class Canvas {
         const data = await response.json();
         if (data.ogImage) {
           this.updateObjectOgImage(objectId, data.ogImage);
-          return;
         }
       }
     } catch (error) {
-      // API endpoint not available (dev mode) or failed, try direct fetch
-    }
-    
-    // Fallback: try to fetch directly from the client (will work for CORS-enabled sites)
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        mode: 'cors',
-      });
-      
-      if (response.ok) {
-        const html = await response.text();
-        const ogImage = this.extractOgImage(html);
-        
-        if (ogImage) {
-          this.updateObjectOgImage(objectId, ogImage);
-          return;
-        }
-      }
-    } catch (error) {
-      // CORS blocked or fetch failed
-      // For development/testing: if no og:image found, we could set a placeholder
-      // but we'll just silently fail as per the requirement (toggle only shows if og:image exists)
+      // API endpoint not available (dev mode) or failed
+      // Toggle buttons won't appear - use setOgImageForTesting() helper for testing
     }
   }
 
