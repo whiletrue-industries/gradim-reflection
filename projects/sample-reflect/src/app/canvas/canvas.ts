@@ -1016,14 +1016,14 @@ export class Canvas {
     }
   }
 
-  protected async shareImage(): Promise<void> {
-    if (!isPlatformBrowser(this.platformId)) return;
-    if (this.objects().length === 0) return;
+  private async renderCompositionToBlob(): Promise<Blob | null> {
+    if (!isPlatformBrowser(this.platformId)) return null;
+    if (this.objects().length === 0) return null;
 
     try {
       // Calculate bounding box of all objects
       const bounds = this.calculateCompositionBounds();
-      if (!bounds) return;
+      if (!bounds) return null;
 
       // Create a canvas for rendering
       const outputSize = 1080;
@@ -1032,7 +1032,7 @@ export class Canvas {
       canvas.width = outputSize;
       canvas.height = outputSize;
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) return null;
 
       // Fill background with canvas background color
       const backgroundColor = '#f5f5f5';
@@ -1059,6 +1059,34 @@ export class Canvas {
         canvas.toBlob(resolve, 'image/png');
       });
 
+      return blob;
+    } catch (error) {
+      console.error('Error rendering composition:', error);
+      return null;
+    }
+  }
+
+  protected async downloadImage(): Promise<void> {
+    try {
+      const blob = await this.renderCompositionToBlob();
+      if (!blob) return;
+
+      // Download the image
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.download = `composition-${timestamp}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading image:', error);
+    }
+  }
+
+  protected async shareImage(): Promise<void> {
+    try {
+      const blob = await this.renderCompositionToBlob();
       if (!blob) return;
 
       // Try to use Web Share API if available
@@ -1075,7 +1103,7 @@ export class Canvas {
         }
       }
 
-      // Fallback: download the image
+      // Fallback: download the image if share is not available
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

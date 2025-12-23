@@ -99,8 +99,11 @@
   </div>
   
   <div class="share-controls">
+    <button class="download-button" (click)="downloadImage()" [disabled]="objects().length === 0">
+      Download
+    </button>
     <button class="share-button" (click)="shareImage()" [disabled]="objects().length === 0">
-      Share Image
+      Share
     </button>
   </div>
   
