@@ -60,7 +60,7 @@ export class Canvas {
   // Iframe interaction state
   protected hoveredIframeId = signal<string | null>(null);
   protected interactiveIframeId = signal<string | null>(null);
-  private hoverTimeoutHandle: number | null = null;
+  private hoverTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   
   // Grid constants
   private readonly baseGridSize = 20; // Base grid size at 100% zoom
@@ -343,14 +343,19 @@ export class Canvas {
     // Cursor affordances are handled by CSS, no need for JavaScript
   }
 
+  private clearHoverTimeout(): void {
+    if (this.hoverTimeoutHandle) {
+      clearTimeout(this.hoverTimeoutHandle);
+      this.hoverTimeoutHandle = null;
+    }
+  }
+
   protected onIframeMouseEnter(objectId: string): void {
     // Clear any existing timeout
-    if (this.hoverTimeoutHandle) {
-      window.clearTimeout(this.hoverTimeoutHandle);
-    }
+    this.clearHoverTimeout();
     
     // Set timeout to dim after 500ms
-    this.hoverTimeoutHandle = window.setTimeout(() => {
+    this.hoverTimeoutHandle = setTimeout(() => {
       // Only dim if this iframe is not already in interactive mode
       if (this.interactiveIframeId() !== objectId) {
         this.hoveredIframeId.set(objectId);
@@ -360,10 +365,7 @@ export class Canvas {
 
   protected onIframeMouseLeave(objectId: string): void {
     // Clear the hover timeout
-    if (this.hoverTimeoutHandle) {
-      window.clearTimeout(this.hoverTimeoutHandle);
-      this.hoverTimeoutHandle = null;
-    }
+    this.clearHoverTimeout();
     
     // Clear hover state
     if (this.hoveredIframeId() === objectId) {
@@ -379,10 +381,7 @@ export class Canvas {
     this.hoveredIframeId.set(null);
     
     // Clear any hover timeout
-    if (this.hoverTimeoutHandle) {
-      window.clearTimeout(this.hoverTimeoutHandle);
-      this.hoverTimeoutHandle = null;
-    }
+    this.clearHoverTimeout();
   }
 
   private updateGridScale(zoom: number): void {
