@@ -5,17 +5,18 @@
   (drop)="onDrop($event)"
   (dragover)="onDragOver($event)"
 >
-  <div class="dot-grid"></div>
+  <div class="dot-grid" [ngStyle]="getDotGridStyle()"></div>
   
   <div class="canvas-objects" [ngStyle]="getCanvasObjectsStyle()">
     @for (obj of objects(); track obj.id) {
-      <div 
-        class="canvas-object"
-        [class.selected]="selectedObjectId() === obj.id"
-        [ngStyle]="getObjectStyle(obj)"
-        (click)="onObjectClick($event, obj.id)"
-                    (mousedown)="onObjectMouseDown($event, obj.id)"
-      >
+               <div 
+                    class="canvas-object"
+                    [class.selected]="selectedObjectId() === obj.id"
+                    [ngStyle]="getObjectStyle(obj)"
+                    (click)="onObjectClick($event, obj.id)"
+                                                  (mousedown)="onObjectMouseDown($event, obj.id)"
+               >
+                    <div class="hover-border" [ngStyle]="getSelectionBorderStyle()"></div>
         @if (obj.type === 'image') {
           <img [src]="obj.content" alt="Canvas image" class="object-content" />
         } @else if (obj.type === 'iframe') {
@@ -30,54 +31,71 @@
         
         @if (selectedObjectId() === obj.id) {
           <!-- Edges (1px when selected, 3px when hovered) -->
-          <div class="selection-border"></div>
+          <div class="selection-border" [ngStyle]="getSelectionBorderStyle()"></div>
           
           <!-- Corner handles -->
           <div class="handle handle-corner handle-nw" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getCursorForHandle(obj, 'scale-nw')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'scale-nw')"></div>
           <div class="handle handle-corner handle-ne" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getCursorForHandle(obj, 'scale-ne')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'scale-ne')"></div>
           <div class="handle handle-corner handle-sw" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getCursorForHandle(obj, 'scale-sw')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'scale-sw')"></div>
           <div class="handle handle-corner handle-se" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getCursorForHandle(obj, 'scale-se')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'scale-se')"></div>
           
           <!-- Edge handles for width scaling -->
           <div class="handle handle-edge handle-w" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getCursorForHandle(obj, 'scale-w')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'scale-w')"></div>
           <div class="handle handle-edge handle-e" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getCursorForHandle(obj, 'scale-e')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'scale-e')"></div>
           
           <!-- Edge handles for height scaling -->
           <div class="handle handle-edge handle-n" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getCursorForHandle(obj, 'scale-n')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'scale-n')"></div>
           <div class="handle handle-edge handle-s" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getCursorForHandle(obj, 'scale-s')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'scale-s')"></div>
           
           <!-- Rotation indicator (outside corners) -->
           <div class="rotation-indicator rotation-nw" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getRotateCursor(obj, 'nw')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'rotate-nw')"></div>
           <div class="rotation-indicator rotation-ne" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getRotateCursor(obj, 'ne')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'rotate-ne')"></div>
           <div class="rotation-indicator rotation-sw" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getRotateCursor(obj, 'sw')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'rotate-sw')"></div>
           <div class="rotation-indicator rotation-se" 
+               [ngStyle]="getInverseScaleStyle(obj)"
                [style.cursor]="getRotateCursor(obj, 'se')"
                (mousedown)="onHandleMouseDown($event, obj.id, 'rotate-se')"></div>
         }
       </div>
     }
+  </div>
+  
+  <div class="zoom-controls">
+    <div class="zoom-counter">{{ zoomPercentage() }}%</div>
+    <button class="zoom-reset" (click)="resetZoom()">Reset</button>
   </div>
   
   <div class="canvas-instructions">
