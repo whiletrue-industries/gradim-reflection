@@ -46,12 +46,18 @@ app.get('/api/url-metadata', async (req, res) => {
   }
 
   try {
-    // Fetch the URL
+    // Fetch the URL with a 10 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; GraDiM-Reflect/1.0)',
       },
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return res.status(response.status).json({ error: 'Failed to fetch URL' });
