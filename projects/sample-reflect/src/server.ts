@@ -13,16 +13,41 @@ const app = express();
 const angularApp = new AngularNodeAppEngine();
 
 /**
- * Example Express Rest API endpoints can be defined here.
- * Uncomment and define endpoints as necessary.
- *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
+ * API endpoint to fetch URL metadata (og:image, etc.)
  */
+app.get('/api/url-metadata', async (req, res) => {
+  const url = req.query.url as string;
+  
+  if (!url) {
+    return res.status(400).json({ error: 'URL parameter is required' });
+  }
+
+  try {
+    // Fetch the URL
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; GraDiM-Reflect/1.0)',
+      },
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: 'Failed to fetch URL' });
+    }
+
+    const html = await response.text();
+    
+    // Extract og:image using regex
+    const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
+                         html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:image["'][^>]*>/i);
+    
+    const ogImage = ogImageMatch ? ogImageMatch[1] : null;
+
+    res.json({ ogImage });
+  } catch (error) {
+    console.error('Error fetching URL metadata:', error);
+    res.status(500).json({ error: 'Failed to fetch URL metadata' });
+  }
+});
 
 /**
  * Serve static files from /browser

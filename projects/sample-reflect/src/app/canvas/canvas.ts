@@ -14,6 +14,8 @@ interface CanvasObject {
   sourceRef: string; // canonical ref used in hash (URL or token)
   originalAspectRatio: number; // h/w ratio of original content
   safeUrl?: SafeResourceUrl; // Sanitized URL for iframes
+  ogImage?: string | null; // og:image URL for iframe objects
+  displayMode?: 'iframe' | 'image'; // Current display mode for iframe objects with og:image
 }
 
 interface TransformHandle {
@@ -212,7 +214,7 @@ export class Canvas {
     if (text && this.isValidUrl(text)) {
       // Add iframe at center of viewport
       const sourceRef = this.deriveSourceRef(text);
-      this.addObject({
+      const newObject: CanvasObject = {
         id: this.generateId(),
         type: 'iframe',
         x: (window.innerWidth / 2 - this.viewportX()) / this.zoom(),
@@ -224,7 +226,14 @@ export class Canvas {
         sourceRef,
         originalAspectRatio: 400 / 600,
         safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(text),
-      });
+        displayMode: 'iframe', // Default to iframe view
+      };
+      
+      this.addObject(newObject);
+      
+      // Fetch og:image metadata in the background
+      this.fetchOgImage(text, newObject.id);
+      
       event.preventDefault();
     }
   }
@@ -236,6 +245,45 @@ export class Canvas {
     } catch {
       return false;
     }
+  }
+
+  private async fetchOgImage(url: string, objectId: string): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) return;
+    
+    try {
+      const response = await fetch(`/api/url-metadata?url=${encodeURIComponent(url)}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ogImage) {
+          // Update the object with og:image
+          this.objects.update(objects =>
+            objects.map(obj =>
+              obj.id === objectId
+                ? { ...obj, ogImage: data.ogImage }
+                : obj
+            )
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch og:image:', error);
+    }
+  }
+
+  protected toggleDisplayMode(objectId: string): void {
+    const obj = this.objects().find(o => o.id === objectId);
+    if (!obj || obj.type !== 'iframe' || !obj.ogImage) return;
+    
+    const newMode = obj.displayMode === 'iframe' ? 'image' : 'iframe';
+    
+    this.objects.update(objects =>
+      objects.map(o =>
+        o.id === objectId
+          ? { ...o, displayMode: newMode }
+          : o
+      )
+    );
+    this.scheduleHashUpdate();
   }
 
   private addObject(obj: CanvasObject): void {
@@ -814,6 +862,15 @@ export class Canvas {
     const rotation = this.roundNumber(obj.rotation);
     const ratio = obj.width === 0 ? 1 : obj.height / obj.width;
     const flags = [`type:${obj.type}`, `ratio:${this.roundNumber(ratio)}`];
+    
+    // Add displayMode and ogImage to flags if present
+    if (obj.displayMode) {
+      flags.push(`mode:${obj.displayMode}`);
+    }
+    if (obj.ogImage) {
+      flags.push(`og:${encodeURIComponent(obj.ogImage)}`);
+    }
+    
     const ref = encodeURIComponent(obj.sourceRef);
     return `${ref}/${x},${y},${scale},${rotation}/${flags.join(',')}`;
   }
@@ -851,6 +908,8 @@ export class Canvas {
       const ratio = typeof ratioValue === 'number' ? ratioValue : parseFloat(String(ratioValue));
       const safeRatio = Number.isNaN(ratio) ? 1 : ratio;
       const type = (flagMap.get('type') as CanvasObject['type'] | undefined) ?? 'image';
+      const displayMode = (flagMap.get('mode') as 'iframe' | 'image' | undefined) ?? 'iframe';
+      const ogImage = flagMap.get('og') ? decodeURIComponent(String(flagMap.get('og'))) : undefined;
       const width = this.baseSize * ts;
       const height = width * safeRatio;
       let content = this.resolveContent(ref, type);
@@ -877,6 +936,8 @@ export class Canvas {
         safeUrl: type === 'iframe' && this.isValidUrl(content)
           ? this.sanitizer.bypassSecurityTrustResourceUrl(content)
           : undefined,
+        ogImage,
+        displayMode,
       });
     }
 
