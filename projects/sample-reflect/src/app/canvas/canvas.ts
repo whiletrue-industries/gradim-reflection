@@ -251,23 +251,53 @@ export class Canvas {
     if (!isPlatformBrowser(this.platformId)) return;
     
     try {
-      const response = await fetch(`/api/url-metadata?url=${encodeURIComponent(url)}`);
+      // Try to fetch directly from the client first (will work for CORS-enabled sites)
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+      });
+      
       if (response.ok) {
-        const data = await response.json();
-        if (data.ogImage) {
-          // Update the object with og:image
-          this.objects.update(objects =>
-            objects.map(obj =>
-              obj.id === objectId
-                ? { ...obj, ogImage: data.ogImage }
-                : obj
-            )
-          );
+        const html = await response.text();
+        const ogImage = this.extractOgImage(html);
+        
+        if (ogImage) {
+          this.updateObjectOgImage(objectId, ogImage);
+          return;
         }
       }
     } catch (error) {
-      console.error('Failed to fetch og:image:', error);
+      // CORS error or fetch failed, try server-side endpoint if available
+      try {
+        const response = await fetch(`/api/url-metadata?url=${encodeURIComponent(url)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ogImage) {
+            this.updateObjectOgImage(objectId, data.ogImage);
+          }
+        }
+      } catch (serverError) {
+        console.log('Could not fetch og:image from server endpoint:', serverError);
+      }
     }
+  }
+
+  private extractOgImage(html: string): string | null {
+    // Extract og:image using regex
+    const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
+                         html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:image["'][^>]*>/i);
+    
+    return ogImageMatch ? ogImageMatch[1] : null;
+  }
+
+  private updateObjectOgImage(objectId: string, ogImage: string): void {
+    this.objects.update(objects =>
+      objects.map(obj =>
+        obj.id === objectId
+          ? { ...obj, ogImage }
+          : obj
+      )
+    );
   }
 
   protected toggleDisplayMode(objectId: string): void {
