@@ -1034,8 +1034,9 @@ export class Canvas {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Fill background
-      ctx.fillStyle = '#f5f5f5';
+      // Fill background with canvas background color
+      const backgroundColor = '#f5f5f5';
+      ctx.fillStyle = backgroundColor;
       ctx.fillRect(0, 0, outputSize, outputSize);
 
       // Calculate scale to fit composition within canvas with padding
@@ -1078,7 +1079,8 @@ export class Canvas {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `composition-${Date.now()}.png`;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.download = `composition-${timestamp}.png`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -1199,7 +1201,10 @@ export class Canvas {
   private loadImage(src: string): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      // Only set crossOrigin for external URLs (not data URLs)
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        img.crossOrigin = 'anonymous';
+      }
       img.onload = () => resolve(img);
       img.onerror = () => reject(new Error('Failed to load image'));
       img.src = src;
