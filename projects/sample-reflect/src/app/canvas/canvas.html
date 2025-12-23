@@ -98,6 +98,12 @@
     <button class="zoom-reset" (click)="resetZoom()">Reset</button>
   </div>
   
+  <div class="share-controls">
+    <button class="share-button" (click)="shareImage()" [disabled]="objects().length === 0">
+      Share Image
+    </button>
+  </div>
+  
   <div class="canvas-instructions">
     <p>Drag and drop images here • Paste URLs (Ctrl/Cmd+V) • Drag canvas to pan • Scroll to zoom</p>
   </div>

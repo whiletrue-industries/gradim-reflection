@@ -1015,4 +1015,194 @@ export class Canvas {
       this.ephemeralTokens.delete(tokenId);
     }
   }
+
+  protected async shareImage(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) return;
+    if (this.objects().length === 0) return;
+
+    try {
+      // Calculate bounding box of all objects
+      const bounds = this.calculateCompositionBounds();
+      if (!bounds) return;
+
+      // Create a canvas for rendering
+      const outputSize = 1080;
+      const padding = 8;
+      const canvas = document.createElement('canvas');
+      canvas.width = outputSize;
+      canvas.height = outputSize;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Fill background
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(0, 0, outputSize, outputSize);
+
+      // Calculate scale to fit composition within canvas with padding
+      const availableSize = outputSize - 2 * padding;
+      const scaleX = availableSize / bounds.width;
+      const scaleY = availableSize / bounds.height;
+      const scale = Math.min(scaleX, scaleY);
+
+      // Calculate offset to center the composition
+      const scaledWidth = bounds.width * scale;
+      const scaledHeight = bounds.height * scale;
+      const offsetX = (outputSize - scaledWidth) / 2;
+      const offsetY = (outputSize - scaledHeight) / 2;
+
+      // Render all objects
+      await this.renderObjectsToCanvas(ctx, bounds, scale, offsetX, offsetY);
+
+      // Convert canvas to blob
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, 'image/png');
+      });
+
+      if (!blob) return;
+
+      // Try to use Web Share API if available
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], 'composition.png', { type: 'image/png' });
+        const shareData = {
+          files: [file],
+          title: 'My Composition',
+        };
+
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      }
+
+      // Fallback: download the image
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `composition-${Date.now()}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error sharing image:', error);
+    }
+  }
+
+  private calculateCompositionBounds(): { x: number; y: number; width: number; height: number } | null {
+    const objs = this.objects();
+    if (objs.length === 0) return null;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const obj of objs) {
+      // Calculate the bounding box of the rotated object
+      const corners = this.getObjectCorners(obj);
+      for (const corner of corners) {
+        minX = Math.min(minX, corner.x);
+        minY = Math.min(minY, corner.y);
+        maxX = Math.max(maxX, corner.x);
+        maxY = Math.max(maxY, corner.y);
+      }
+    }
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  }
+
+  private getObjectCorners(obj: CanvasObject): Array<{ x: number; y: number }> {
+    const cx = obj.x + obj.width / 2;
+    const cy = obj.y + obj.height / 2;
+    const rad = (obj.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    const corners = [
+      { x: -obj.width / 2, y: -obj.height / 2 },
+      { x: obj.width / 2, y: -obj.height / 2 },
+      { x: obj.width / 2, y: obj.height / 2 },
+      { x: -obj.width / 2, y: obj.height / 2 },
+    ];
+
+    return corners.map(corner => ({
+      x: cx + corner.x * cos - corner.y * sin,
+      y: cy + corner.x * sin + corner.y * cos,
+    }));
+  }
+
+  private async renderObjectsToCanvas(
+    ctx: CanvasRenderingContext2D,
+    bounds: { x: number; y: number; width: number; height: number },
+    scale: number,
+    offsetX: number,
+    offsetY: number
+  ): Promise<void> {
+    // Render objects in order
+    for (const obj of this.objects()) {
+      ctx.save();
+
+      // Calculate position relative to bounds
+      const relX = obj.x - bounds.x;
+      const relY = obj.y - bounds.y;
+
+      // Transform for position and rotation
+      const centerX = offsetX + (relX + obj.width / 2) * scale;
+      const centerY = offsetY + (relY + obj.height / 2) * scale;
+
+      ctx.translate(centerX, centerY);
+      ctx.rotate((obj.rotation * Math.PI) / 180);
+
+      const scaledWidth = obj.width * scale;
+      const scaledHeight = obj.height * scale;
+
+      if (obj.type === 'image') {
+        try {
+          const img = await this.loadImage(obj.content);
+          ctx.drawImage(
+            img,
+            -scaledWidth / 2,
+            -scaledHeight / 2,
+            scaledWidth,
+            scaledHeight
+          );
+        } catch (error) {
+          console.warn('Failed to load image:', error);
+          // Draw placeholder
+          ctx.fillStyle = '#ddd';
+          ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+        }
+      } else if (obj.type === 'iframe') {
+        // For iframes, we can't render the actual content due to CORS
+        // Draw a placeholder with the URL
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#007bff';
+        ctx.lineWidth = 2;
+        ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+        ctx.strokeRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+
+        // Add text label
+        ctx.fillStyle = '#333';
+        ctx.font = `${Math.max(12, scaledHeight * 0.1)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Web Content', 0, 0);
+      }
+
+      ctx.restore();
+    }
+  }
+
+  private loadImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = src;
+    });
+  }
 }

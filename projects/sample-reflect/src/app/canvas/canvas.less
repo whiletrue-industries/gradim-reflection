@@ -314,3 +314,44 @@
     }
   }
 }
+
+.share-controls {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 8px 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  pointer-events: auto;
+  
+  .share-button {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    
+    &:hover:not(:disabled) {
+      background-color: #218838;
+    }
+    
+    &:active:not(:disabled) {
+      background-color: #1e7e34;
+    }
+    
+    &:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+  }
+}
