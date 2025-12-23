@@ -251,7 +251,24 @@ export class Canvas {
     if (!isPlatformBrowser(this.platformId)) return;
     
     try {
-      // Try to fetch directly from the client first (will work for CORS-enabled sites)
+      // Try server-side endpoint first (works in SSR mode)
+      const response = await fetch(`/api/url-metadata?url=${encodeURIComponent(url)}`);
+      
+      // Check if we got a valid JSON response (not HTML 404)
+      const contentType = response.headers.get('content-type');
+      if (response.ok && contentType?.includes('application/json')) {
+        const data = await response.json();
+        if (data.ogImage) {
+          this.updateObjectOgImage(objectId, data.ogImage);
+          return;
+        }
+      }
+    } catch (error) {
+      // API endpoint not available (dev mode) or failed, try direct fetch
+    }
+    
+    // Fallback: try to fetch directly from the client (will work for CORS-enabled sites)
+    try {
       const response = await fetch(url, {
         method: 'GET',
         mode: 'cors',
@@ -267,20 +284,9 @@ export class Canvas {
         }
       }
     } catch (error) {
-      // CORS error or fetch failed, try server-side endpoint if available
-      try {
-        const response = await fetch(`/api/url-metadata?url=${encodeURIComponent(url)}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.ogImage) {
-            this.updateObjectOgImage(objectId, data.ogImage);
-          }
-        } else {
-          console.error(`Failed to fetch og:image from server: ${response.status} ${response.statusText}`);
-        }
-      } catch (serverError) {
-        console.error('Could not fetch og:image from server endpoint:', serverError);
-      }
+      // CORS blocked or fetch failed
+      // For development/testing: if no og:image found, we could set a placeholder
+      // but we'll just silently fail as per the requirement (toggle only shows if og:image exists)
     }
   }
 
@@ -316,6 +322,25 @@ export class Canvas {
       )
     );
     this.scheduleHashUpdate();
+  }
+
+  // Development helper: manually set og:image for testing
+  // Usage in browser console: window.ng.getComponent(document.querySelector('app-canvas')).setOgImageForTesting('https://example.com/image.jpg')
+  public setOgImageForTesting(ogImageUrl: string): void {
+    const selectedId = this.selectedObjectId();
+    if (!selectedId) {
+      console.warn('No object selected. Please select an iframe object first.');
+      return;
+    }
+    
+    const obj = this.objects().find(o => o.id === selectedId);
+    if (!obj || obj.type !== 'iframe') {
+      console.warn('Selected object is not an iframe.');
+      return;
+    }
+    
+    this.updateObjectOgImage(selectedId, ogImageUrl);
+    console.log('og:image set to:', ogImageUrl, '- toggle buttons should now be visible');
   }
 
   private addObject(obj: CanvasObject): void {
