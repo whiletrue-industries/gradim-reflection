@@ -951,7 +951,7 @@ export class Canvas {
       const ratio = typeof ratioValue === 'number' ? ratioValue : parseFloat(String(ratioValue));
       const safeRatio = Number.isNaN(ratio) ? 1 : ratio;
       const type = (flagMap.get('type') as CanvasObject['type'] | undefined) ?? 'image';
-      const displayMode = (flagMap.get('mode') as 'iframe' | 'image' | undefined) ?? 'iframe';
+      const displayMode = (flagMap.get('mode') as 'iframe' | 'image' | undefined) ?? 'image';
       const ogImage = flagMap.get('og') ? decodeURIComponent(String(flagMap.get('og'))) : undefined;
       const width = this.baseSize * ts;
       const height = width * safeRatio;
