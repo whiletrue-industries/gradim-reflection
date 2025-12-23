@@ -1034,10 +1034,8 @@ export class Canvas {
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
 
-      // Fill background with canvas background color
-      const backgroundColor = '#f5f5f5';
-      ctx.fillStyle = backgroundColor;
-      ctx.fillRect(0, 0, outputSize, outputSize);
+      // Leave background transparent (no fill)
+      // The canvas will have a transparent background for PNG export
 
       // Calculate scale to fit composition within canvas with padding
       const availableSize = outputSize - 2 * padding;
