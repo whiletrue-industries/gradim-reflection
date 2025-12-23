@@ -226,7 +226,7 @@ export class Canvas {
         sourceRef,
         originalAspectRatio: 400 / 600,
         safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(text),
-        displayMode: 'iframe', // Default to iframe view
+        displayMode: 'image', // Default to image view (og:image preview)
       };
       
       this.addObject(newObject);

@@ -20,7 +20,9 @@
         @if (obj.type === 'image') {
           <img [src]="obj.content" alt="Canvas image" class="object-content" />
         } @else if (obj.type === 'iframe') {
-          @if (obj.displayMode === 'iframe' || !obj.ogImage) {
+          @if (obj.displayMode === 'image' && obj.ogImage) {
+            <img [src]="obj.ogImage" alt="URL preview" class="object-content" />
+          } @else {
             <iframe 
               [src]="obj.safeUrl || obj.content" 
               class="object-content"
@@ -28,8 +30,6 @@
               sandbox="allow-scripts allow-same-origin allow-forms"
                                 (load)="onIframeLoad($event, obj.id)"
             ></iframe>
-          } @else {
-            <img [src]="obj.ogImage" alt="URL preview" class="object-content" />
           }
         }
         
