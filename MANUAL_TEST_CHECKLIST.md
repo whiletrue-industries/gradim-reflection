@@ -56,7 +56,33 @@
 
 ---
 
-## Feature 3: Hash Synchronization
+## Feature 3: Iframe Hover Dimming
+
+**Steps:**
+1. Paste a URL (Ctrl/Cmd+V) to add an iframe to the canvas (e.g., https://example.com)
+2. Hover your mouse over the iframe
+3. Wait 500ms (half a second)
+4. The iframe should dim and show a "Click to interact" overlay
+5. Click the overlay to enable interaction
+6. Click outside the iframe to reset it
+
+**Expected Results:**
+- ✅ Hovering over iframe for 500ms triggers dimming effect (opacity 0.4)
+- ✅ "Click to interact" overlay appears over dimmed iframe
+- ✅ Moving mouse away before 500ms cancels the effect
+- ✅ Clicking the overlay enables iframe interaction (pointer-events enabled)
+- ✅ Clicking outside the iframe resets it to non-interactive state
+- ✅ Clicking on another canvas object resets iframe interaction
+
+**If it fails:**
+- Check that the iframe is visible on canvas
+- Verify you waited at least 500ms while hovering
+- Check browser console for errors
+- Try refreshing the page and testing again
+
+---
+
+## Feature 4: Hash Synchronization
 
 **Steps:**
 
@@ -146,6 +172,8 @@ If something doesn't work:
 Feature is **WORKING** if:
 - ✅ Can delete items with Backspace
 - ✅ Images scale smoothly without distortion
+- ✅ Iframes dim after 500ms hover and show "Click to interact"
+- ✅ Iframe interaction can be enabled/disabled
 - ✅ Hash updates on all interactions
 - ✅ Hash can restore exact canvas state when copied/loaded
 

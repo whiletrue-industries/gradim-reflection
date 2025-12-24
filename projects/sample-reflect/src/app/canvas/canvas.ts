@@ -57,6 +57,12 @@ export class Canvas {
   protected viewportY = signal(0);
   protected zoom = signal(1);
   
+  // Iframe interaction state
+  protected hoveredIframeId = signal<string | null>(null);
+  protected interactiveIframeId = signal<string | null>(null);
+  private hoverTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  private iframeScrollUpdateMap = new WeakMap<HTMLIFrameElement, () => void>();
+  
   // Grid constants
   private readonly baseGridSize = 20; // Base grid size at 100% zoom
   private readonly gridScaleLevels = [0.25, 0.5, 1, 2, 4, 8, 16]; // Available grid scales
@@ -269,6 +275,15 @@ export class Canvas {
   protected onObjectClick(event: MouseEvent, objectId: string): void {
     event.stopPropagation();
     this.selectedObjectId.set(objectId);
+    
+    // Reset interactive iframe when clicking on a different object
+    const clickedObj = this.objects().find(o => o.id === objectId);
+    if (clickedObj?.type !== 'iframe' || this.interactiveIframeId() !== objectId) {
+      this.interactiveIframeId.set(null);
+      
+      // Update iframe scroll state for same-origin iframes
+      this.updateAllIframeScrollStates();
+    }
   }
           // this.scheduleHashUpdate(); // Removed scheduleHashUpdate in mousemove
   protected onCanvasClick(event: MouseEvent): void {
@@ -283,6 +298,11 @@ export class Canvas {
     
     if (isBackgroundClick) {
       this.selectedObjectId.set(null);
+      // Reset interactive iframe when clicking outside
+      this.interactiveIframeId.set(null);
+      
+      // Update iframe scroll state for same-origin iframes
+      this.updateAllIframeScrollStates();
     }
   }
 
@@ -328,6 +348,64 @@ export class Canvas {
 
   protected onObjectMouseLeave(event: MouseEvent): void {
     // Cursor affordances are handled by CSS, no need for JavaScript
+  }
+
+  private updateAllIframeScrollStates(): void {
+    // Update scroll state for all iframes based on their interactive state
+    setTimeout(() => {
+      const iframeElements = document.querySelectorAll('iframe.object-content');
+      iframeElements.forEach((iframe: Element) => {
+        const iframeEl = iframe as HTMLIFrameElement;
+        const updateFn = this.iframeScrollUpdateMap.get(iframeEl);
+        if (updateFn) {
+          updateFn();
+        }
+      });
+    }, 0);
+  }
+
+  private clearHoverTimeout(): void {
+    if (this.hoverTimeoutHandle) {
+      clearTimeout(this.hoverTimeoutHandle);
+      this.hoverTimeoutHandle = null;
+    }
+  }
+
+  protected onIframeMouseEnter(objectId: string): void {
+    // Clear any existing timeout
+    this.clearHoverTimeout();
+    
+    // Set timeout to dim after 500ms
+    this.hoverTimeoutHandle = setTimeout(() => {
+      // Only dim if this iframe is not already in interactive mode
+      if (this.interactiveIframeId() !== objectId) {
+        this.hoveredIframeId.set(objectId);
+      }
+    }, 500);
+  }
+
+  protected onIframeMouseLeave(objectId: string): void {
+    // Clear the hover timeout
+    this.clearHoverTimeout();
+    
+    // Clear hover state
+    if (this.hoveredIframeId() === objectId) {
+      this.hoveredIframeId.set(null);
+    }
+  }
+
+  protected onIframeOverlayClick(event: MouseEvent, objectId: string): void {
+    event.stopPropagation();
+    
+    // Enable interaction for this iframe
+    this.interactiveIframeId.set(objectId);
+    this.hoveredIframeId.set(null);
+    
+    // Clear any hover timeout
+    this.clearHoverTimeout();
+    
+    // Update iframe scroll state for same-origin iframes
+    this.updateAllIframeScrollStates();
   }
 
   private updateGridScale(zoom: number): void {
@@ -665,24 +743,50 @@ export class Canvas {
   }
 
   // Attempt to hide scrollbars inside same-origin iframes by injecting CSS
+  // When iframe is interactive, scrolling will be enabled
   protected onIframeLoad(event: Event, objectId: string): void {
     const iframe = event.target as HTMLIFrameElement | null;
     if (!iframe) return;
-    try {
-      const doc = iframe.contentDocument || iframe.contentWindow?.document || null;
-      if (!doc) return;
-      if (doc.documentElement) {
-        (doc.documentElement as HTMLElement).style.overflow = 'hidden';
+    
+    // Store reference for potential style updates when interactive state changes
+    const updateIframeScroll = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document || null;
+        if (!doc) return;
+        
+        const isInteractive = this.interactiveIframeId() === objectId;
+        const overflowValue = isInteractive ? 'auto' : 'hidden';
+        
+        if (doc.documentElement) {
+          (doc.documentElement as HTMLElement).style.overflow = overflowValue;
+        }
+        if (doc.body) {
+          doc.body.style.overflow = overflowValue;
+        }
+        
+        // Remove old style if exists
+        const existingStyle = doc.head?.querySelector('style[data-iframe-scroll]');
+        if (existingStyle) {
+          existingStyle.remove();
+        }
+        
+        // Only hide scrollbars when not interactive
+        if (!isInteractive) {
+          const style = doc.createElement('style');
+          style.setAttribute('data-iframe-scroll', 'true');
+          style.textContent = '::-webkit-scrollbar{display:none} html,body{overflow:hidden!important}';
+          doc.head?.appendChild(style);
+        }
+      } catch {
+        // Cross-origin: cannot access; rely on outer CSS and scrolling attribute
       }
-      if (doc.body) {
-        doc.body.style.overflow = 'hidden';
-      }
-      const style = doc.createElement('style');
-      style.textContent = '::-webkit-scrollbar{display:none} html,body{overflow:hidden!important}';
-      doc.head?.appendChild(style);
-    } catch {
-      // Cross-origin: cannot access; rely on outer CSS and scrolling="no"
-    }
+    };
+    
+    // Initial update
+    updateIframeScroll();
+    
+    // Store the update function in WeakMap for later use
+    this.iframeScrollUpdateMap.set(iframe, updateIframeScroll);
   }
 
   // ---- Cursor helpers ----

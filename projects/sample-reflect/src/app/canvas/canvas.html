@@ -20,13 +20,31 @@
         @if (obj.type === 'image') {
           <img [src]="obj.content" alt="Canvas image" class="object-content" />
         } @else if (obj.type === 'iframe') {
-          <iframe 
-            [src]="obj.safeUrl || obj.content" 
-            class="object-content"
-                              scrolling="no"
-            sandbox="allow-scripts allow-same-origin allow-forms"
-                              (load)="onIframeLoad($event, obj.id)"
-          ></iframe>
+          <div 
+            class="iframe-wrapper"
+            (mouseenter)="onIframeMouseEnter(obj.id)"
+            (mouseleave)="onIframeMouseLeave(obj.id)"
+          >
+            <iframe 
+              [src]="obj.safeUrl || obj.content" 
+              class="object-content"
+              [class.dimmed]="hoveredIframeId() === obj.id"
+              [class.interactive]="interactiveIframeId() === obj.id"
+              [attr.scrolling]="interactiveIframeId() === obj.id ? 'yes' : 'no'"
+              sandbox="allow-scripts allow-same-origin allow-forms"
+              (load)="onIframeLoad($event, obj.id)"
+            ></iframe>
+            @if (hoveredIframeId() === obj.id && interactiveIframeId() !== obj.id) {
+              <div 
+                class="iframe-overlay"
+                (click)="onIframeOverlayClick($event, obj.id)"
+              >
+                <div class="iframe-overlay-message">
+                  Click to interact
+                </div>
+              </div>
+            }
+          </div>
         }
         
         @if (selectedObjectId() === obj.id) {
