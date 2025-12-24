@@ -22,16 +22,35 @@
           <img [src]="obj.content" alt="Canvas image" class="object-content" />
         } @else if (obj.type === 'iframe') {
           @if (obj.displayMode === 'image' && obj.ogImage) {
-            <!-- Use NgOptimizedImage for remote og:image previews; use fill mode -->
-            <img [ngSrc]="obj.ogImage" fill alt="URL preview" class="object-content" />
+            <!-- Show og:image preview when in image mode -->
+            <img [src]="obj.ogImage" alt="URL preview" class="object-content" />
           } @else {
-            <iframe 
-              [src]="obj.safeUrl || obj.content" 
-              class="object-content"
-                                scrolling="no"
-              sandbox="allow-scripts allow-same-origin allow-forms"
-                                (load)="onIframeLoad($event, obj.id)"
-            ></iframe>
+            <!-- Show iframe with interaction overlay when in iframe mode -->
+            <div 
+              class="iframe-wrapper"
+              (mouseenter)="onIframeMouseEnter(obj.id)"
+              (mouseleave)="onIframeMouseLeave(obj.id)"
+            >
+              <iframe 
+                [src]="obj.safeUrl || obj.content" 
+                class="object-content"
+                [class.dimmed]="hoveredIframeId() === obj.id"
+                [class.interactive]="interactiveIframeId() === obj.id"
+                [attr.scrolling]="interactiveIframeId() === obj.id ? 'yes' : 'no'"
+                sandbox="allow-scripts allow-same-origin allow-forms"
+                (load)="onIframeLoad($event, obj.id)"
+              ></iframe>
+              @if (hoveredIframeId() === obj.id && interactiveIframeId() !== obj.id) {
+                <div 
+                  class="iframe-overlay"
+                  (click)="onIframeOverlayClick($event, obj.id)"
+                >
+                  <div class="iframe-overlay-message">
+                    Click to interact
+                  </div>
+                </div>
+              }
+            </div>
           }
         }
         
@@ -129,6 +148,15 @@
   <div class="zoom-controls">
     <div class="zoom-counter">{{ zoomPercentage() }}%</div>
     <button class="zoom-reset" (click)="resetZoom()">Reset</button>
+  </div>
+  
+  <div class="share-controls">
+    <button class="download-button" (click)="downloadImage()" [disabled]="objects().length === 0">
+      Download
+    </button>
+    <button class="share-button" (click)="shareImage()" [disabled]="objects().length === 0">
+      Share
+    </button>
   </div>
   
   <div class="canvas-instructions">

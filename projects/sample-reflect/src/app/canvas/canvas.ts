@@ -59,6 +59,12 @@ export class Canvas {
   protected viewportY = signal(0);
   protected zoom = signal(1);
   
+  // Iframe interaction state
+  protected hoveredIframeId = signal<string | null>(null);
+  protected interactiveIframeId = signal<string | null>(null);
+  private hoverTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  private iframeScrollUpdateMap = new WeakMap<HTMLIFrameElement, () => void>();
+  
   // Grid constants
   private readonly baseGridSize = 20; // Base grid size at 100% zoom
   private readonly gridScaleLevels = [0.25, 0.5, 1, 2, 4, 8, 16]; // Available grid scales
@@ -474,6 +480,15 @@ export class Canvas {
   protected onObjectClick(event: MouseEvent, objectId: string): void {
     event.stopPropagation();
     this.selectedObjectId.set(objectId);
+    
+    // Reset interactive iframe when clicking on a different object
+    const clickedObj = this.objects().find(o => o.id === objectId);
+    if (clickedObj?.type !== 'iframe' || this.interactiveIframeId() !== objectId) {
+      this.interactiveIframeId.set(null);
+      
+      // Update iframe scroll state for same-origin iframes
+      this.updateAllIframeScrollStates();
+    }
   }
           // this.scheduleHashUpdate(); // Removed scheduleHashUpdate in mousemove
   protected onCanvasClick(event: MouseEvent): void {
@@ -488,6 +503,11 @@ export class Canvas {
     
     if (isBackgroundClick) {
       this.selectedObjectId.set(null);
+      // Reset interactive iframe when clicking outside
+      this.interactiveIframeId.set(null);
+      
+      // Update iframe scroll state for same-origin iframes
+      this.updateAllIframeScrollStates();
     }
   }
 
@@ -533,6 +553,64 @@ export class Canvas {
 
   protected onObjectMouseLeave(event: MouseEvent): void {
     // Cursor affordances are handled by CSS, no need for JavaScript
+  }
+
+  private updateAllIframeScrollStates(): void {
+    // Update scroll state for all iframes based on their interactive state
+    setTimeout(() => {
+      const iframeElements = document.querySelectorAll('iframe.object-content');
+      iframeElements.forEach((iframe: Element) => {
+        const iframeEl = iframe as HTMLIFrameElement;
+        const updateFn = this.iframeScrollUpdateMap.get(iframeEl);
+        if (updateFn) {
+          updateFn();
+        }
+      });
+    }, 0);
+  }
+
+  private clearHoverTimeout(): void {
+    if (this.hoverTimeoutHandle) {
+      clearTimeout(this.hoverTimeoutHandle);
+      this.hoverTimeoutHandle = null;
+    }
+  }
+
+  protected onIframeMouseEnter(objectId: string): void {
+    // Clear any existing timeout
+    this.clearHoverTimeout();
+    
+    // Set timeout to dim after 500ms
+    this.hoverTimeoutHandle = setTimeout(() => {
+      // Only dim if this iframe is not already in interactive mode
+      if (this.interactiveIframeId() !== objectId) {
+        this.hoveredIframeId.set(objectId);
+      }
+    }, 500);
+  }
+
+  protected onIframeMouseLeave(objectId: string): void {
+    // Clear the hover timeout
+    this.clearHoverTimeout();
+    
+    // Clear hover state
+    if (this.hoveredIframeId() === objectId) {
+      this.hoveredIframeId.set(null);
+    }
+  }
+
+  protected onIframeOverlayClick(event: MouseEvent, objectId: string): void {
+    event.stopPropagation();
+    
+    // Enable interaction for this iframe
+    this.interactiveIframeId.set(objectId);
+    this.hoveredIframeId.set(null);
+    
+    // Clear any hover timeout
+    this.clearHoverTimeout();
+    
+    // Update iframe scroll state for same-origin iframes
+    this.updateAllIframeScrollStates();
   }
 
   private updateGridScale(zoom: number): void {
@@ -870,24 +948,50 @@ export class Canvas {
   }
 
   // Attempt to hide scrollbars inside same-origin iframes by injecting CSS
+  // When iframe is interactive, scrolling will be enabled
   protected onIframeLoad(event: Event, objectId: string): void {
     const iframe = event.target as HTMLIFrameElement | null;
     if (!iframe) return;
-    try {
-      const doc = iframe.contentDocument || iframe.contentWindow?.document || null;
-      if (!doc) return;
-      if (doc.documentElement) {
-        (doc.documentElement as HTMLElement).style.overflow = 'hidden';
+    
+    // Store reference for potential style updates when interactive state changes
+    const updateIframeScroll = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document || null;
+        if (!doc) return;
+        
+        const isInteractive = this.interactiveIframeId() === objectId;
+        const overflowValue = isInteractive ? 'auto' : 'hidden';
+        
+        if (doc.documentElement) {
+          (doc.documentElement as HTMLElement).style.overflow = overflowValue;
+        }
+        if (doc.body) {
+          doc.body.style.overflow = overflowValue;
+        }
+        
+        // Remove old style if exists
+        const existingStyle = doc.head?.querySelector('style[data-iframe-scroll]');
+        if (existingStyle) {
+          existingStyle.remove();
+        }
+        
+        // Only hide scrollbars when not interactive
+        if (!isInteractive) {
+          const style = doc.createElement('style');
+          style.setAttribute('data-iframe-scroll', 'true');
+          style.textContent = '::-webkit-scrollbar{display:none} html,body{overflow:hidden!important}';
+          doc.head?.appendChild(style);
+        }
+      } catch {
+        // Cross-origin: cannot access; rely on outer CSS and scrolling attribute
       }
-      if (doc.body) {
-        doc.body.style.overflow = 'hidden';
-      }
-      const style = doc.createElement('style');
-      style.textContent = '::-webkit-scrollbar{display:none} html,body{overflow:hidden!important}';
-      doc.head?.appendChild(style);
-    } catch {
-      // Cross-origin: cannot access; rely on outer CSS and scrolling="no"
-    }
+    };
+    
+    // Initial update
+    updateIframeScroll();
+    
+    // Store the update function in WeakMap for later use
+    this.iframeScrollUpdateMap.set(iframe, updateIframeScroll);
   }
 
   // ---- Cursor helpers ----
@@ -1240,5 +1344,226 @@ export class Canvas {
       }
       this.ephemeralTokens.delete(tokenId);
     }
+  }
+
+  private async renderCompositionToBlob(): Promise<Blob | null> {
+    if (!isPlatformBrowser(this.platformId)) return null;
+    if (this.objects().length === 0) return null;
+
+    try {
+      // Calculate bounding box of all objects
+      const bounds = this.calculateCompositionBounds();
+      if (!bounds) return null;
+
+      // Create a canvas for rendering
+      const outputSize = 1080;
+      const padding = 8;
+      const canvas = document.createElement('canvas');
+      canvas.width = outputSize;
+      canvas.height = outputSize;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      // Leave background transparent (no fill)
+      // The canvas will have a transparent background for PNG export
+
+      // Calculate scale to fit composition within canvas with padding
+      const availableSize = outputSize - 2 * padding;
+      const scaleX = availableSize / bounds.width;
+      const scaleY = availableSize / bounds.height;
+      const scale = Math.min(scaleX, scaleY);
+
+      // Calculate offset to center the composition
+      const scaledWidth = bounds.width * scale;
+      const scaledHeight = bounds.height * scale;
+      const offsetX = (outputSize - scaledWidth) / 2;
+      const offsetY = (outputSize - scaledHeight) / 2;
+
+      // Render all objects
+      await this.renderObjectsToCanvas(ctx, bounds, scale, offsetX, offsetY);
+
+      // Convert canvas to blob
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, 'image/png');
+      });
+
+      return blob;
+    } catch (error) {
+      console.error('Error rendering composition:', error);
+      return null;
+    }
+  }
+
+  protected async downloadImage(): Promise<void> {
+    try {
+      const blob = await this.renderCompositionToBlob();
+      if (!blob) return;
+
+      // Download the image
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.download = `composition-${timestamp}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading image:', error);
+    }
+  }
+
+  protected async shareImage(): Promise<void> {
+    try {
+      const blob = await this.renderCompositionToBlob();
+      if (!blob) return;
+
+      // Try to use Web Share API if available
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], 'composition.png', { type: 'image/png' });
+        const shareData = {
+          files: [file],
+          title: 'My Composition',
+        };
+
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      }
+
+      // Fallback: download the image if share is not available
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.download = `composition-${timestamp}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error sharing image:', error);
+    }
+  }
+
+  private calculateCompositionBounds(): { x: number; y: number; width: number; height: number } | null {
+    const objs = this.objects();
+    if (objs.length === 0) return null;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const obj of objs) {
+      // Calculate the bounding box of the rotated object
+      const corners = this.getObjectCorners(obj);
+      for (const corner of corners) {
+        minX = Math.min(minX, corner.x);
+        minY = Math.min(minY, corner.y);
+        maxX = Math.max(maxX, corner.x);
+        maxY = Math.max(maxY, corner.y);
+      }
+    }
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  }
+
+  private getObjectCorners(obj: CanvasObject): Array<{ x: number; y: number }> {
+    const cx = obj.x + obj.width / 2;
+    const cy = obj.y + obj.height / 2;
+    const rad = (obj.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    const corners = [
+      { x: -obj.width / 2, y: -obj.height / 2 },
+      { x: obj.width / 2, y: -obj.height / 2 },
+      { x: obj.width / 2, y: obj.height / 2 },
+      { x: -obj.width / 2, y: obj.height / 2 },
+    ];
+
+    return corners.map(corner => ({
+      x: cx + corner.x * cos - corner.y * sin,
+      y: cy + corner.x * sin + corner.y * cos,
+    }));
+  }
+
+  private async renderObjectsToCanvas(
+    ctx: CanvasRenderingContext2D,
+    bounds: { x: number; y: number; width: number; height: number },
+    scale: number,
+    offsetX: number,
+    offsetY: number
+  ): Promise<void> {
+    // Render objects in order
+    for (const obj of this.objects()) {
+      ctx.save();
+
+      // Calculate position relative to bounds
+      const relX = obj.x - bounds.x;
+      const relY = obj.y - bounds.y;
+
+      // Transform for position and rotation
+      const centerX = offsetX + (relX + obj.width / 2) * scale;
+      const centerY = offsetY + (relY + obj.height / 2) * scale;
+
+      ctx.translate(centerX, centerY);
+      ctx.rotate((obj.rotation * Math.PI) / 180);
+
+      const scaledWidth = obj.width * scale;
+      const scaledHeight = obj.height * scale;
+
+      if (obj.type === 'image') {
+        try {
+          const img = await this.loadImage(obj.content);
+          ctx.drawImage(
+            img,
+            -scaledWidth / 2,
+            -scaledHeight / 2,
+            scaledWidth,
+            scaledHeight
+          );
+        } catch (error) {
+          console.warn('Failed to load image:', error);
+          // Draw placeholder
+          ctx.fillStyle = '#ddd';
+          ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+        }
+      } else if (obj.type === 'iframe') {
+        // For iframes, we can't render the actual content due to CORS
+        // Draw a placeholder with the URL
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#007bff';
+        ctx.lineWidth = 2;
+        ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+        ctx.strokeRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+
+        // Add text label
+        ctx.fillStyle = '#333';
+        ctx.font = `${Math.max(12, scaledHeight * 0.1)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Web Content', 0, 0);
+      }
+
+      ctx.restore();
+    }
+  }
+
+  private loadImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      // Only set crossOrigin for external URLs (not data URLs)
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        img.crossOrigin = 'anonymous';
+      }
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = src;
+    });
   }
 }
