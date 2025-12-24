@@ -1,4 +1,4 @@
-import { Component, signal, computed, ChangeDetectionStrategy, inject, PLATFORM_ID, effect } from '@angular/core';
+import { Component, signal, computed, ChangeDetectionStrategy, inject, PLATFORM_ID, effect, afterNextRender } from '@angular/core';
 import { isPlatformBrowser, CommonModule, NgOptimizedImage } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
@@ -111,15 +111,11 @@ export class Canvas {
   constructor() {
     if (isPlatformBrowser(this.platformId)) {
       this.setupEventListeners();
-      try {
-        const storedHash = sessionStorage.getItem('canvasLastHash');
-        if (!window.location.hash && storedHash) {
-          window.location.hash = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
-        }
-      } catch {}
-      this.applyHashState(window.location.hash);
+      
       window.addEventListener('hashchange', this.onHashChange);
       window.addEventListener('keydown', (e) => this.onKeyDown(e));
+      
+      // Set up effects first, before restoring state
       effect(() => {
         // Track canvas view and objects; schedule hash sync when they change.
         this.viewportX();
@@ -132,6 +128,59 @@ export class Canvas {
         // Update grid scale when zoom changes
         const currentZoom = this.zoom();
         this.updateGridScale(currentZoom);
+      });
+      
+      // Now restore hash from sessionStorage before Angular routing might clear it
+      // Note: window.location.hash is automatically decoded by the browser, which breaks
+      // our parsing (URLs contain '/' which conflicts with our segment delimiter).
+      // Always prefer sessionStorage which has the properly encoded version.
+      let hashToRestore = '';
+      
+      try {
+        const storedHash = sessionStorage.getItem('canvasLastHash');
+        console.log('[Canvas] Constructor - storedHash:', storedHash);
+        if (storedHash) {
+          // Use the properly encoded version from sessionStorage
+          hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
+          console.log('[Canvas] Constructor - using hash from sessionStorage:', hashToRestore);
+        } else {
+          // Fallback to window.location.hash if no stored hash (first visit)
+          hashToRestore = window.location.hash;
+          console.log('[Canvas] Constructor - using hash from window.location:', hashToRestore);
+        }
+        
+        // Update window.location to use the properly encoded version
+        if (hashToRestore && hashToRestore !== window.location.hash) {
+          window.history.replaceState(null, '', hashToRestore);
+        }
+      } catch (e) {
+        console.error('[Canvas] Constructor - error accessing sessionStorage:', e);
+        hashToRestore = window.location.hash;
+      }
+      
+      // Suppress hash writes during initial state restoration
+      this.suppressHash = true;
+      console.log('[Canvas] Constructor - applying hash state:', hashToRestore);
+      this.applyHashState(hashToRestore);
+      this.suppressHash = false;
+      
+      // Additional safeguard: restore hash after Angular hydration completes
+      afterNextRender(() => {
+        console.log('[Canvas] afterNextRender - window.location.hash:', window.location.hash);
+        try {
+          const storedHash = sessionStorage.getItem('canvasLastHash');
+          console.log('[Canvas] afterNextRender - storedHash:', storedHash);
+          if (storedHash && !window.location.hash) {
+            const hashValue = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
+            console.log('[Canvas] afterNextRender - restoring hash:', hashValue);
+            window.history.replaceState(null, '', hashValue);
+            this.suppressHash = true;
+            this.applyHashState(hashValue);
+            this.suppressHash = false;
+          }
+        } catch (e) {
+          console.error('[Canvas] afterNextRender - error:', e);
+        }
       });
     }
   }
@@ -937,8 +986,10 @@ export class Canvas {
     this.hashUpdateHandle = window.setTimeout(() => {
       const hash = this.serializeStateToHash();
       const prefixedHash = hash ? `#${hash}` : '';
+      console.log('[Canvas] scheduleHashUpdate - serialized hash:', prefixedHash);
       // Only write if changed to avoid unnecessary hashchange events
       if (prefixedHash !== this.lastSerializedHash) {
+        console.log('[Canvas] scheduleHashUpdate - updating hash and sessionStorage');
         window.location.hash = prefixedHash;
         this.lastSerializedHash = prefixedHash;
         try {
