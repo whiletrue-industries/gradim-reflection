@@ -67,16 +67,29 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true,
-              "outputMode": "static",
-              "server": false,
-              "ssr": false
+                  "sourceMap": true,
+                  "outputMode": "static",
+                  "server": false,
+                  "ssr": false
+                },
+                "dev-ssr": {
+                  "optimization": false,
+                  "extractLicenses": false,
+                  "sourceMap": true,
+                  "outputMode": "server",
+                  "server": "projects/main/src/main.server.ts",
+                  "ssr": {
+                    "entry": "projects/main/src/server.ts"
+                  }
             }
           },
           "defaultConfiguration": "production"
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "proxyConfig": "proxy.conf.json"
+          },
           "configurations": {
             "production": {
               "buildTarget": "main:build:production"
@@ -174,16 +187,29 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true,
-              "outputMode": "static",
-              "server": false,
-              "ssr": false
+                  "sourceMap": true,
+                  "outputMode": "static",
+                  "server": false,
+                  "ssr": false
+                },
+                "dev-ssr": {
+                  "optimization": false,
+                  "extractLicenses": false,
+                  "sourceMap": true,
+                  "outputMode": "server",
+                  "server": "projects/sample-reflect/src/main.server.ts",
+                  "ssr": {
+                    "entry": "projects/sample-reflect/src/server.ts"
+                  }
             }
           },
           "defaultConfiguration": "production"
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "proxyConfig": "proxy.conf.json"
+          },
           "configurations": {
             "production": {
               "buildTarget": "sample-reflect:build:production"

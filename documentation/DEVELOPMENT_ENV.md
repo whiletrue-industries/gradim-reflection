@@ -52,10 +52,24 @@ The main app will be available at `http://localhost:4200`
 
 #### Sample-Reflect Application (Standalone)
 ```bash
-ng serve sample-reflect
+# One command: builds SSR and starts both SSR API + dev server
+npm run dev:sample
 ```
 
-The sample-reflect app will be available at `http://localhost:4200`
+The sample-reflect app will be available at `http://localhost:4201`.
+
+Notes:
+- The dev server is configured to proxy `/api` to `http://localhost:4000` (see `proxy.conf.json`).
+- The SSR server exposes `/api/url-metadata` which the canvas uses to fetch `og:image` previews.
+
+### Running SSR API in Main App
+
+If you want the `/api/url-metadata` endpoint while working on the main app:
+
+```bash
+# One command: builds SSR and starts both SSR API + dev server
+npm run dev:main
+```
 
 #### Accessing Inner Apps in Development Mode
 When running the main app, inner apps are accessible via routes:

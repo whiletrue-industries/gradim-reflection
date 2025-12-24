@@ -18,10 +18,12 @@
                >
                     <div class="hover-border" [ngStyle]="getSelectionBorderStyle()"></div>
         @if (obj.type === 'image') {
+          <!-- Use normal src for data/base64 images; NgOptimizedImage is not suitable here -->
           <img [src]="obj.content" alt="Canvas image" class="object-content" />
         } @else if (obj.type === 'iframe') {
           @if (obj.displayMode === 'image' && obj.ogImage) {
-            <img [src]="obj.ogImage" alt="URL preview" class="object-content" />
+            <!-- Use NgOptimizedImage for remote og:image previews; use fill mode -->
+            <img [ngSrc]="obj.ogImage" fill alt="URL preview" class="object-content" />
           } @else {
             <iframe 
               [src]="obj.safeUrl || obj.content" 

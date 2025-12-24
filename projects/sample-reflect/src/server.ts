@@ -6,6 +6,7 @@ import {
 } from '@angular/ssr/node';
 import express from 'express';
 import { join } from 'node:path';
+import { extractPreviewImage } from './url-metadata';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -52,7 +53,8 @@ app.get('/api/url-metadata', async (req, res) => {
     
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; GraDiM-Reflect/1.0)',
+        // Mimic a modern desktop browser UA to avoid basic bot blocking
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
       },
       signal: controller.signal,
     });
@@ -64,17 +66,12 @@ app.get('/api/url-metadata', async (req, res) => {
     }
 
     const html = await response.text();
-    
-    // Extract og:image using regex
-    const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
-                         html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:image["'][^>]*>/i);
-    
-    const ogImage = ogImageMatch ? ogImageMatch[1] : null;
-
-    return res.json({ ogImage });
+    const ogImage = extractPreviewImage(html, parsedUrl.toString());
+    return res.json({ ogImage: ogImage ?? null });
   } catch (error) {
     console.error('Error fetching URL metadata:', error);
-    return res.status(500).json({ error: 'Failed to fetch URL metadata' });
+    // Return 200 with ogImage: null so the client can gracefully fall back
+    return res.status(200).json({ ogImage: null, error: 'fetch_failed' });
   }
 });
 
