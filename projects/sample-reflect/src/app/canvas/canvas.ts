@@ -311,13 +311,39 @@ export class Canvas {
   }
 
   private updateObjectOgImage(objectId: string, ogImage: string): void {
-    this.objects.update(objects =>
-      objects.map(obj =>
-        obj.id === objectId
-          ? { ...obj, ogImage }
-          : obj
-      )
-    );
+    // Load the image to get its dimensions
+    const img = new Image();
+    img.onload = () => {
+      const aspectRatio = img.naturalHeight / img.naturalWidth || 1;
+      const newWidth = 600; // Keep a reasonable default width
+      const newHeight = newWidth * aspectRatio;
+      
+      this.objects.update(objects =>
+        objects.map(obj =>
+          obj.id === objectId
+            ? { 
+                ...obj, 
+                ogImage,
+                width: newWidth,
+                height: newHeight,
+                originalAspectRatio: aspectRatio
+              }
+            : obj
+        )
+      );
+      this.scheduleHashUpdate();
+    };
+    img.onerror = () => {
+      // If image fails to load, just set the og:image without resizing
+      this.objects.update(objects =>
+        objects.map(obj =>
+          obj.id === objectId
+            ? { ...obj, ogImage }
+            : obj
+        )
+      );
+    };
+    img.src = ogImage;
   }
 
   protected toggleDisplayMode(objectId: string): void {
