@@ -1534,20 +1534,28 @@ export class Canvas {
           ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
         }
       } else if (obj.type === 'iframe') {
-        // For iframes, we can't render the actual content due to CORS
-        // Draw a placeholder with the URL
-        ctx.fillStyle = '#fff';
-        ctx.strokeStyle = '#007bff';
-        ctx.lineWidth = 2;
-        ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
-        ctx.strokeRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
-
-        // Add text label
-        ctx.fillStyle = '#333';
-        ctx.font = `${Math.max(12, scaledHeight * 0.1)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Web Content', 0, 0);
+        // Render iframe content based on what's available
+        // Priority: 1. og:image (if available), 2. placeholder
+        if (obj.ogImage) {
+          // If we have an og:image, render it regardless of displayMode
+          try {
+            const img = await this.loadImage(obj.ogImage);
+            ctx.drawImage(
+              img,
+              -scaledWidth / 2,
+              -scaledHeight / 2,
+              scaledWidth,
+              scaledHeight
+            );
+          } catch (error) {
+            console.warn('Failed to load og:image:', error);
+            // Fall back to placeholder if og:image fails to load
+            this.drawIframePlaceholder(ctx, scaledWidth, scaledHeight);
+          }
+        } else {
+          // No og:image available, draw placeholder
+          this.drawIframePlaceholder(ctx, scaledWidth, scaledHeight);
+        }
       }
 
       ctx.restore();
@@ -1565,5 +1573,21 @@ export class Canvas {
       img.onerror = () => reject(new Error('Failed to load image'));
       img.src = src;
     });
+  }
+
+  private drawIframePlaceholder(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    // Draw a placeholder with the URL
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#007bff';
+    ctx.lineWidth = 2;
+    ctx.fillRect(-width / 2, -height / 2, width, height);
+    ctx.strokeRect(-width / 2, -height / 2, width, height);
+
+    // Add text label
+    ctx.fillStyle = '#333';
+    ctx.font = `${Math.max(12, height * 0.1)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Web Content', 0, 0);
   }
 }
