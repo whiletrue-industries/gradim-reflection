@@ -111,6 +111,12 @@ export class Canvas {
   constructor() {
     if (isPlatformBrowser(this.platformId)) {
       this.setupEventListeners();
+      try {
+        const storedHash = sessionStorage.getItem('canvasLastHash');
+        if (!window.location.hash && storedHash) {
+          window.location.hash = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
+        }
+      } catch {}
       this.applyHashState(window.location.hash);
       window.addEventListener('hashchange', this.onHashChange);
       window.addEventListener('keydown', (e) => this.onKeyDown(e));
@@ -935,6 +941,9 @@ export class Canvas {
       if (prefixedHash !== this.lastSerializedHash) {
         window.location.hash = prefixedHash;
         this.lastSerializedHash = prefixedHash;
+        try {
+          sessionStorage.setItem('canvasLastHash', prefixedHash);
+        } catch {}
       }
       this.hashDirty = false;
       this.hashUpdateHandle = null;
@@ -1049,6 +1058,9 @@ export class Canvas {
     this.objects.set(nextObjects);
     this.selectedObjectId.set(null);
     this.lastSerializedHash = hash.startsWith('#') ? hash : `#${hash}`;
+    try {
+      sessionStorage.setItem('canvasLastHash', this.lastSerializedHash);
+    } catch {}
   }
 
   private resolveContent(ref: string, type: CanvasObject['type']): string | null {
