@@ -1,5 +1,5 @@
-import { Component, signal, computed, ChangeDetectionStrategy, inject, PLATFORM_ID, effect } from '@angular/core';
-import { isPlatformBrowser, CommonModule } from '@angular/common';
+import { Component, signal, computed, ChangeDetectionStrategy, inject, PLATFORM_ID, effect, afterNextRender } from '@angular/core';
+import { isPlatformBrowser, CommonModule, NgOptimizedImage } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 interface CanvasObject {
@@ -14,6 +14,8 @@ interface CanvasObject {
   sourceRef: string; // canonical ref used in hash (URL or token)
   originalAspectRatio: number; // h/w ratio of original content
   safeUrl?: SafeResourceUrl; // Sanitized URL for iframes
+  ogImage?: string | null; // og:image URL for iframe objects
+  displayMode?: 'iframe' | 'image'; // Current display mode for iframe objects with og:image
 }
 
 interface TransformHandle {
@@ -23,7 +25,7 @@ interface TransformHandle {
 
 @Component({
   selector: 'app-canvas',
-  imports: [CommonModule],
+  imports: [CommonModule, NgOptimizedImage],
   templateUrl: './canvas.html',
   styleUrl: './canvas.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -115,9 +117,11 @@ export class Canvas {
   constructor() {
     if (isPlatformBrowser(this.platformId)) {
       this.setupEventListeners();
-      this.applyHashState(window.location.hash);
+      
       window.addEventListener('hashchange', this.onHashChange);
       window.addEventListener('keydown', (e) => this.onKeyDown(e));
+      
+      // Set up effects first, before restoring state
       effect(() => {
         // Track canvas view and objects; schedule hash sync when they change.
         this.viewportX();
@@ -130,6 +134,59 @@ export class Canvas {
         // Update grid scale when zoom changes
         const currentZoom = this.zoom();
         this.updateGridScale(currentZoom);
+      });
+      
+      // Now restore hash from sessionStorage before Angular routing might clear it
+      // Note: window.location.hash is automatically decoded by the browser, which breaks
+      // our parsing (URLs contain '/' which conflicts with our segment delimiter).
+      // Always prefer sessionStorage which has the properly encoded version.
+      let hashToRestore = '';
+      
+      try {
+        const storedHash = sessionStorage.getItem('canvasLastHash');
+        console.log('[Canvas] Constructor - storedHash:', storedHash);
+        if (storedHash) {
+          // Use the properly encoded version from sessionStorage
+          hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
+          console.log('[Canvas] Constructor - using hash from sessionStorage:', hashToRestore);
+        } else {
+          // Fallback to window.location.hash if no stored hash (first visit)
+          hashToRestore = window.location.hash;
+          console.log('[Canvas] Constructor - using hash from window.location:', hashToRestore);
+        }
+        
+        // Update window.location to use the properly encoded version
+        if (hashToRestore && hashToRestore !== window.location.hash) {
+          window.history.replaceState(null, '', hashToRestore);
+        }
+      } catch (e) {
+        console.error('[Canvas] Constructor - error accessing sessionStorage:', e);
+        hashToRestore = window.location.hash;
+      }
+      
+      // Suppress hash writes during initial state restoration
+      this.suppressHash = true;
+      console.log('[Canvas] Constructor - applying hash state:', hashToRestore);
+      this.applyHashState(hashToRestore);
+      this.suppressHash = false;
+      
+      // Additional safeguard: restore hash after Angular hydration completes
+      afterNextRender(() => {
+        console.log('[Canvas] afterNextRender - window.location.hash:', window.location.hash);
+        try {
+          const storedHash = sessionStorage.getItem('canvasLastHash');
+          console.log('[Canvas] afterNextRender - storedHash:', storedHash);
+          if (storedHash && !window.location.hash) {
+            const hashValue = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
+            console.log('[Canvas] afterNextRender - restoring hash:', hashValue);
+            window.history.replaceState(null, '', hashValue);
+            this.suppressHash = true;
+            this.applyHashState(hashValue);
+            this.suppressHash = false;
+          }
+        } catch (e) {
+          console.error('[Canvas] afterNextRender - error:', e);
+        }
       });
     }
   }
@@ -218,7 +275,7 @@ export class Canvas {
     if (text && this.isValidUrl(text)) {
       // Add iframe at center of viewport
       const sourceRef = this.deriveSourceRef(text);
-      this.addObject({
+      const newObject: CanvasObject = {
         id: this.generateId(),
         type: 'iframe',
         x: (window.innerWidth / 2 - this.viewportX()) / this.zoom(),
@@ -230,7 +287,14 @@ export class Canvas {
         sourceRef,
         originalAspectRatio: 400 / 600,
         safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(text),
-      });
+        displayMode: 'image', // Default to image view (og:image preview)
+      };
+      
+      this.addObject(newObject);
+      
+      // Fetch og:image metadata in the background
+      this.fetchOgImage(text, newObject.id);
+      
       event.preventDefault();
     }
   }
@@ -242,6 +306,147 @@ export class Canvas {
     } catch {
       return false;
     }
+  }
+
+  private async fetchOgImage(url: string, objectId: string): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) return;
+    
+    let ogImageFetched = false;
+    
+    // Only try server-side endpoint - client-side CORS fetch fails for most sites
+    // and generates noisy console errors that confuse users
+    try {
+      const response = await fetch(`/api/url-metadata?url=${encodeURIComponent(url)}`);
+      
+      // Check if we got a valid JSON response (not HTML 404)
+      const contentType = response.headers.get('content-type');
+      if (response.ok && contentType?.includes('application/json')) {
+        const data = await response.json();
+        if (data.ogImage) {
+          this.updateObjectOgImage(objectId, data.ogImage);
+          ogImageFetched = true;
+        }
+      }
+    } catch (error) {
+      // API endpoint not available (dev mode) or failed
+    }
+    
+    // If og:image wasn't fetched from API, try development fallback
+    if (!ogImageFetched) {
+      this.trySetDevelopmentOgImage(url, objectId);
+    }
+  }
+
+  private trySetDevelopmentOgImage(url: string, objectId: string): void {
+    // In development mode, set known og:images for common domains to enable testing
+    try {
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname.toLowerCase();
+      
+      // Map of common domains to their og:image URLs (for development testing only)
+      const devOgImages: Record<string, string> = {
+        'github.com': 'https://github.githubassets.com/images/modules/site/social-cards/github-social.png',
+        'www.github.com': 'https://github.githubassets.com/images/modules/site/social-cards/github-social.png',
+        'youtube.com': 'https://www.youtube.com/img/desktop/yt_1200.png',
+        'www.youtube.com': 'https://www.youtube.com/img/desktop/yt_1200.png',
+      };
+      
+      const ogImage = devOgImages[hostname];
+      if (ogImage) {
+        // Set after a short delay to simulate API fetch
+        setTimeout(() => {
+          this.updateObjectOgImage(objectId, ogImage);
+        }, 500);
+      }
+    } catch (error) {
+      // Invalid URL or other error - silently ignore
+    }
+  }
+
+  private extractOgImage(html: string): string | null {
+    // Extract og:image using regex
+    const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
+                         html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:image["'][^>]*>/i);
+    
+    return ogImageMatch ? ogImageMatch[1] : null;
+  }
+
+  private updateObjectOgImage(objectId: string, ogImage: string): void {
+    // Load the image to get its dimensions
+    const img = new Image();
+    img.onload = () => {
+      const aspectRatio = img.naturalHeight / img.naturalWidth || 1;
+      const newWidth = 600; // Keep a reasonable default width
+      const newHeight = newWidth * aspectRatio;
+      
+      this.objects.update(objects =>
+        objects.map(obj =>
+          obj.id === objectId
+            ? { 
+                ...obj, 
+                ogImage,
+                width: newWidth,
+                height: newHeight,
+                originalAspectRatio: aspectRatio
+              }
+            : obj
+        )
+      );
+      this.scheduleHashUpdate();
+    };
+    img.onerror = () => {
+      // If image fails to load, just set the og:image without resizing
+      this.objects.update(objects =>
+        objects.map(obj =>
+          obj.id === objectId
+            ? { ...obj, ogImage }
+            : obj
+        )
+      );
+    };
+    img.src = ogImage;
+  }
+
+  protected toggleDisplayMode(objectId: string): void {
+    const obj = this.objects().find(o => o.id === objectId);
+    if (!obj || obj.type !== 'iframe' || !obj.ogImage) return;
+    
+    const newMode = obj.displayMode === 'iframe' ? 'image' : 'iframe';
+    
+    this.objects.update(objects =>
+      objects.map(o =>
+        o.id === objectId
+          ? { ...o, displayMode: newMode }
+          : o
+      )
+    );
+    this.scheduleHashUpdate();
+  }
+
+  // Development helper: manually set og:image for testing (only available in dev builds)
+  // Usage: Enable Angular DevTools, then in console: ng.getComponent($0).setOgImageForTesting('url')
+  // Or inject via Angular debug: const comp = document.querySelector('app-canvas'); ng.getComponent(comp).setOgImageForTesting('url')
+  public setOgImageForTesting(ogImageUrl: string): void {
+    // Validate URL format
+    if (!this.isValidUrl(ogImageUrl)) {
+      console.error('Invalid URL format:', ogImageUrl);
+      return;
+    }
+    
+    const selectedId = this.selectedObjectId();
+    if (!selectedId) {
+      console.warn('No object selected. Please select an iframe object first.');
+      return;
+    }
+    
+    const obj = this.objects().find(o => o.id === selectedId);
+    if (!obj || obj.type !== 'iframe') {
+      console.warn('Selected object is not an iframe.');
+      return;
+    }
+    
+    this.updateObjectOgImage(selectedId, ogImageUrl);
+    console.log('og:image set to:', ogImageUrl, '- toggle buttons should now be visible');
   }
 
   private addObject(obj: CanvasObject): void {
@@ -885,10 +1090,15 @@ export class Canvas {
     this.hashUpdateHandle = window.setTimeout(() => {
       const hash = this.serializeStateToHash();
       const prefixedHash = hash ? `#${hash}` : '';
+      console.log('[Canvas] scheduleHashUpdate - serialized hash:', prefixedHash);
       // Only write if changed to avoid unnecessary hashchange events
       if (prefixedHash !== this.lastSerializedHash) {
+        console.log('[Canvas] scheduleHashUpdate - updating hash and sessionStorage');
         window.location.hash = prefixedHash;
         this.lastSerializedHash = prefixedHash;
+        try {
+          sessionStorage.setItem('canvasLastHash', prefixedHash);
+        } catch {}
       }
       this.hashDirty = false;
       this.hashUpdateHandle = null;
@@ -918,6 +1128,15 @@ export class Canvas {
     const rotation = this.roundNumber(obj.rotation);
     const ratio = obj.width === 0 ? 1 : obj.height / obj.width;
     const flags = [`type:${obj.type}`, `ratio:${this.roundNumber(ratio)}`];
+    
+    // Add displayMode and ogImage to flags if present
+    if (obj.displayMode) {
+      flags.push(`mode:${obj.displayMode}`);
+    }
+    if (obj.ogImage) {
+      flags.push(`og:${encodeURIComponent(obj.ogImage)}`);
+    }
+    
     const ref = encodeURIComponent(obj.sourceRef);
     return `${ref}/${x},${y},${scale},${rotation}/${flags.join(',')}`;
   }
@@ -955,6 +1174,8 @@ export class Canvas {
       const ratio = typeof ratioValue === 'number' ? ratioValue : parseFloat(String(ratioValue));
       const safeRatio = Number.isNaN(ratio) ? 1 : ratio;
       const type = (flagMap.get('type') as CanvasObject['type'] | undefined) ?? 'image';
+      const displayMode = (flagMap.get('mode') as 'iframe' | 'image' | undefined) ?? 'image';
+      const ogImage = flagMap.get('og') ? decodeURIComponent(String(flagMap.get('og'))) : undefined;
       const width = this.baseSize * ts;
       const height = width * safeRatio;
       let content = this.resolveContent(ref, type);
@@ -981,6 +1202,8 @@ export class Canvas {
         safeUrl: type === 'iframe' && this.isValidUrl(content)
           ? this.sanitizer.bypassSecurityTrustResourceUrl(content)
           : undefined,
+        ogImage,
+        displayMode,
       });
     }
 
@@ -990,6 +1213,9 @@ export class Canvas {
     this.objects.set(nextObjects);
     this.selectedObjectId.set(null);
     this.lastSerializedHash = hash.startsWith('#') ? hash : `#${hash}`;
+    try {
+      sessionStorage.setItem('canvasLastHash', this.lastSerializedHash);
+    } catch {}
   }
 
   private resolveContent(ref: string, type: CanvasObject['type']): string | null {

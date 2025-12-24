@@ -312,6 +312,55 @@
       right: -30px;
     }
   }
+  
+  // Display mode toggle for iframe objects
+  .display-mode-toggle {
+    position: absolute;
+    top: -50px;
+    left: 50%;
+    transform: translateX(-50%);
+    transform-origin: center;
+    display: flex;
+    gap: 4px;
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 4px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    pointer-events: all;
+    z-index: 15;
+    
+    .toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      background-color: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: #6c757d;
+      padding: 0;
+      
+      &:hover {
+        background-color: #e9ecef;
+        border-color: #adb5bd;
+        color: #495057;
+      }
+      
+      &.active {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+      }
+      
+      svg {
+        width: 16px;
+        height: 16px;
+      }
+    }
+  }
 }
 
 .canvas-instructions {

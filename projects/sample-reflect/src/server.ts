@@ -6,6 +6,7 @@ import {
 } from '@angular/ssr/node';
 import express from 'express';
 import { join } from 'node:path';
+import { extractPreviewImage } from './url-metadata';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -13,16 +14,66 @@ const app = express();
 const angularApp = new AngularNodeAppEngine();
 
 /**
- * Example Express Rest API endpoints can be defined here.
- * Uncomment and define endpoints as necessary.
- *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
+ * API endpoint to fetch URL metadata (og:image, etc.)
  */
+app.get('/api/url-metadata', async (req, res) => {
+  const url = req.query['url'] as string;
+  
+  if (!url) {
+    return res.status(400).json({ error: 'URL parameter is required' });
+  }
+
+  // Validate URL format and restrict to HTTP/HTTPS only
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return res.status(400).json({ error: 'Only HTTP and HTTPS URLs are allowed' });
+    }
+    
+    // Block localhost, private IPs, and internal networks to prevent SSRF
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname.startsWith('127.') ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('10.') ||
+      hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./)
+    ) {
+      return res.status(400).json({ error: 'Cannot fetch from internal/private networks' });
+    }
+  } catch (error) {
+    return res.status(400).json({ error: 'Invalid URL format' });
+  }
+
+  try {
+    // Fetch the URL with a 10 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    const response = await fetch(url, {
+      headers: {
+        // Mimic a modern desktop browser UA to avoid basic bot blocking
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+      },
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: 'Failed to fetch URL' });
+    }
+
+    const html = await response.text();
+    const ogImage = extractPreviewImage(html, parsedUrl.toString());
+    return res.json({ ogImage: ogImage ?? null });
+  } catch (error) {
+    console.error('Error fetching URL metadata:', error);
+    // Return 200 with ogImage: null so the client can gracefully fall back
+    return res.status(200).json({ ogImage: null, error: 'fetch_failed' });
+  }
+});
 
 /**
  * Serve static files from /browser

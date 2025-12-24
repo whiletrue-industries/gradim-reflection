@@ -7,10 +7,14 @@
     "start:main": "ng serve main --port 4200 --host 0.0.0.0",
     "start:sample": "ng serve sample-reflect --port 4201 --host 0.0.0.0",
     "build": "ng build",
+    "build:ssr:main": "ng build main --configuration dev-ssr",
+    "build:ssr:sample": "ng build sample-reflect --configuration dev-ssr",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "serve:ssr:main": "node dist/main/server/server.mjs",
-    "serve:ssr:sample-reflect": "node dist/sample-reflect/server/server.mjs"
+    "serve:ssr:sample-reflect": "node dist/sample-reflect/server/server.mjs",
+    "dev:main": "npm run build:ssr:main && concurrently -n SSR,DEV -c \"bgBlue.bold,bgGreen.bold\" \"npm:serve:ssr:main\" \"ng serve main --port 4200 --host 0.0.0.0 --proxy-config proxy.conf.json\"",
+    "dev:sample": "npm run build:ssr:sample && concurrently -n SSR,DEV -c \"bgBlue.bold,bgGreen.bold\" \"npm:serve:ssr:sample-reflect\" \"ng serve sample-reflect --port 4201 --host 0.0.0.0 --proxy-config proxy.conf.json\""
   },
   "prettier": {
     "printWidth": 100,
@@ -45,6 +49,7 @@
     "@angular/compiler-cli": "^21.0.0",
     "@types/express": "^5.0.1",
     "@types/node": "^20.17.19",
+    "concurrently": "^9.0.1",
     "jsdom": "^27.1.0",
     "less": "^4.2.0",
     "ng-packagr": "^21.0.0",
