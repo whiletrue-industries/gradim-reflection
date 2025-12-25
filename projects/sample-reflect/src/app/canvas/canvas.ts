@@ -1216,6 +1216,13 @@ export class Canvas {
     try {
       sessionStorage.setItem('canvasLastHash', this.lastSerializedHash);
     } catch {}
+    
+    // Refetch og:image for iframe objects missing it
+    for (const obj of nextObjects) {
+      if (obj.type === 'iframe' && !obj.ogImage && this.isValidUrl(obj.content)) {
+        this.fetchOgImage(obj.content, obj.id);
+      }
+    }
   }
 
   private resolveContent(ref: string, type: CanvasObject['type']): string | null {
@@ -1386,7 +1393,6 @@ export class Canvas {
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob(resolve, 'image/png');
       });
-
       return blob;
     } catch (error) {
       console.error('Error rendering composition:', error);
@@ -1411,7 +1417,6 @@ export class Canvas {
       console.error('Error downloading image:', error);
     }
   }
-
   protected async shareImage(): Promise<void> {
     try {
       const blob = await this.renderCompositionToBlob();
@@ -1534,20 +1539,40 @@ export class Canvas {
           ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
         }
       } else if (obj.type === 'iframe') {
-        // For iframes, we can't render the actual content due to CORS
-        // Draw a placeholder with the URL
-        ctx.fillStyle = '#fff';
-        ctx.strokeStyle = '#007bff';
-        ctx.lineWidth = 2;
-        ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
-        ctx.strokeRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+        // Try to render og:image if available and not explicitly in iframe display mode
+        // Default behavior: if ogImage exists and displayMode is not 'iframe', show the og:image
+        if (obj.ogImage && obj.displayMode !== 'iframe') {
+          try {
+            const img = await this.loadImage(obj.ogImage);
+            ctx.drawImage(
+              img,
+              -scaledWidth / 2,
+              -scaledHeight / 2,
+              scaledWidth,
+              scaledHeight
+            );
+          } catch (error) {
+            console.warn('Failed to load og:image:', error);
+            // Fallback to placeholder
+            ctx.fillStyle = '#ddd';
+            ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+          }
+        } else {
+          // For iframes without og:image or explicitly in iframe mode, we can't render the actual content due to CORS
+          // Draw a placeholder with the URL
+          ctx.fillStyle = '#fff';
+          ctx.strokeStyle = '#007bff';
+          ctx.lineWidth = 2;
+          ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+          ctx.strokeRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
 
-        // Add text label
-        ctx.fillStyle = '#333';
-        ctx.font = `${Math.max(12, scaledHeight * 0.1)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Web Content', 0, 0);
+          // Add text label
+          ctx.fillStyle = '#333';
+          ctx.font = `${Math.max(12, scaledHeight * 0.1)}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('Web Content', 0, 0);
+        }
       }
 
       ctx.restore();
