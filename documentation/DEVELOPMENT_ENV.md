@@ -61,6 +61,8 @@ The sample-reflect app will be available at `http://localhost:4201`.
 Notes:
 - The dev server is configured to proxy `/api` to `http://localhost:4000` (see `proxy.conf.json`).
 - The SSR server exposes `/api/url-metadata` which the canvas uses to fetch `og:image` previews.
+  - For resilience, this endpoint always responds with `200` and JSON: `{ ogImage: string | null, error?: string, status?: number }`.
+  - When a target site blocks server requests (e.g., paywalls, IP ACL, or 4xx/5xx), the endpoint returns `{ ogImage: null, error: 'bad_status' | 'fetch_failed' }` so the UI can degrade gracefully without surfacing proxy errors.
 
 ### Running SSR API in Main App
 

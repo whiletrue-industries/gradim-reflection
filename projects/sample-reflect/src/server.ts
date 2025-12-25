@@ -7,6 +7,21 @@ import {
 import express from 'express';
 import { join } from 'node:path';
 import { extractPreviewImage } from './url-metadata';
+// Optional: use an outbound HTTP proxy if configured via environment variables.
+// This helps when target sites block datacenter IPs or require region-specific access.
+let proxyDispatcher: any = null;
+try {
+  const httpProxy = process.env['HTTP_PROXY'] || process.env['http_proxy'] || process.env['HTTPS_PROXY'] || process.env['https_proxy'];
+  if (httpProxy) {
+    // Lazy import undici's ProxyAgent only when needed
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ProxyAgent } = require('undici');
+    proxyDispatcher = new ProxyAgent(httpProxy);
+    console.log('[url-metadata] Using outbound proxy:', httpProxy);
+  }
+} catch (e) {
+  // If undici ProxyAgent is unavailable, proceed without a proxy
+}
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -55,14 +70,21 @@ app.get('/api/url-metadata', async (req, res) => {
       headers: {
         // Mimic a modern desktop browser UA to avoid basic bot blocking
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
       },
       signal: controller.signal,
-    });
+      // Use outbound proxy when configured (undici extension not in RequestInit type)
+      ...(proxyDispatcher && { dispatcher: proxyDispatcher }),
+    } as any);
     
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch URL' });
+      // Do not propagate upstream status codes (e.g., 402/403/5xx).
+      // Always respond with 200 JSON so the client can gracefully handle null og:image
+      // without surfacing proxy/server errors in the UI.
+      return res.status(200).json({ ogImage: null, error: 'bad_status', status: response.status });
     }
 
     const html = await response.text();

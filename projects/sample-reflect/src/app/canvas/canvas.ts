@@ -1,5 +1,5 @@
 import { Component, signal, computed, ChangeDetectionStrategy, inject, PLATFORM_ID, effect, afterNextRender } from '@angular/core';
-import { isPlatformBrowser, CommonModule, NgOptimizedImage } from '@angular/common';
+import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 interface CanvasObject {
@@ -25,7 +25,7 @@ interface TransformHandle {
 
 @Component({
   selector: 'app-canvas',
-  imports: [CommonModule, NgOptimizedImage],
+  imports: [CommonModule],
   templateUrl: './canvas.html',
   styleUrl: './canvas.less',
   changeDetection: ChangeDetectionStrategy.OnPush,

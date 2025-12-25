@@ -8,6 +8,18 @@ import express from 'express';
 import { join } from 'node:path';
 import { extractPreviewImage } from '../../sample-reflect/src/url-metadata';
 
+// Optional: use an outbound HTTP proxy if configured via environment variables.
+let proxyDispatcher: any = null;
+try {
+  const httpProxy = process.env['HTTP_PROXY'] || process.env['http_proxy'] || process.env['HTTPS_PROXY'] || process.env['https_proxy'];
+  if (httpProxy) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ProxyAgent } = require('undici');
+    proxyDispatcher = new ProxyAgent(httpProxy);
+    console.log('[url-metadata(main)] Using outbound proxy:', httpProxy);
+  }
+} catch {}
+
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
@@ -51,13 +63,19 @@ app.get('/api/url-metadata', async (req, res) => {
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
       },
       signal: controller.signal,
-    });
+      // Use outbound proxy when configured (undici extension not in RequestInit type)
+      ...(proxyDispatcher && { dispatcher: proxyDispatcher }),
+    } as any);
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch URL' });
+      // Normalize upstream errors to a 200 JSON response so the UI can
+      // handle null og:image without surfacing proxy/server errors.
+      return res.status(200).json({ ogImage: null, error: 'bad_status', status: response.status });
     }
 
     const html = await response.text();
