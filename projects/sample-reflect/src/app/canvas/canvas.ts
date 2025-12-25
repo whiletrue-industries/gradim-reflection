@@ -48,6 +48,21 @@ export class Canvas {
   private readonly transparentPixel =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/hsrLxkAAAAASUVORK5CYII=';
   
+  // Touch interaction state
+  private touchStartDistance = 0;
+  private touchStartZoom = 1;
+  private isTouchPinching = false;
+  private activeTouches = 0;
+  
+  // Mobile detection
+  protected isMobile = signal(false);
+  protected instructionsText = computed(() => {
+    if (this.isMobile()) {
+      return 'Tap to select • Pinch to zoom • Two fingers to pan';
+    }
+    return 'Drag & drop images • Paste URLs (Ctrl/Cmd+V) • Scroll to zoom';
+  });
+  
   protected objects = signal<CanvasObject[]>([]);
   protected selectedObjectId = signal<string | null>(null);
   protected selectedObject = computed(() => {
@@ -120,6 +135,11 @@ export class Canvas {
       
       window.addEventListener('hashchange', this.onHashChange);
       window.addEventListener('keydown', (e) => this.onKeyDown(e));
+      
+      // Detect mobile device after render
+      afterNextRender(() => {
+        this.isMobile.set(this.detectMobile());
+      });
       
       // Set up effects first, before restoring state
       effect(() => {
@@ -207,6 +227,36 @@ export class Canvas {
     
     // Wheel event for zooming
     window.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+    
+    // Touch events for mobile
+    window.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+    window.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+    window.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+    
+    // Update mobile detection on resize
+    window.addEventListener('resize', () => {
+      this.isMobile.set(this.detectMobile());
+    });
+  }
+  
+  private detectMobile(): boolean {
+    if (!isPlatformBrowser(this.platformId)) return false;
+    
+    // Primary check: screen width (most reliable for responsive design)
+    const isSmallScreen = window.innerWidth <= 768;
+    
+    // Check for touch support
+    const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    // Check user agent for mobile devices
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+    
+    // Consider it mobile if:
+    // 1. Small screen, OR
+    // 2. Small screen + touch support, OR
+    // 3. Mobile user agent + touch support
+    return isSmallScreen || (hasTouchScreen && isMobileUA);
   }
 
   protected onDrop(event: DragEvent): void {
@@ -546,6 +596,61 @@ export class Canvas {
       window.addEventListener('mouseup', onMouseUp);
     }
   }
+  
+  protected onCanvasTouchStart(event: TouchEvent): void {
+    // Only handle two-finger pan on canvas background
+    if (event.touches.length === 2) {
+      const target = event.target as HTMLElement;
+      const isBackgroundTouch = target === event.currentTarget || 
+                                 target.classList.contains('dot-grid') ||
+                                 target.classList.contains('canvas-objects');
+      
+      if (isBackgroundTouch) {
+        event.preventDefault();
+        this.suppressHash = true;
+        this.selectedObjectId.set(null);
+        this.isPanningCanvas = true;
+        
+        const touch1 = event.touches[0];
+        const touch2 = event.touches[1];
+        const midX = (touch1.clientX + touch2.clientX) / 2;
+        const midY = (touch1.clientY + touch2.clientY) / 2;
+        
+        this.dragStartX = midX;
+        this.dragStartY = midY;
+        this.panStartViewportX = this.viewportX();
+        this.panStartViewportY = this.viewportY();
+
+        const onTouchMove = (e: TouchEvent) => {
+          if (!this.isPanningCanvas || e.touches.length !== 2) return;
+          
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          const currentMidX = (t1.clientX + t2.clientX) / 2;
+          const currentMidY = (t1.clientY + t2.clientY) / 2;
+          
+          const dx = currentMidX - this.dragStartX;
+          const dy = currentMidY - this.dragStartY;
+          
+          this.viewportX.set(this.panStartViewportX + dx);
+          this.viewportY.set(this.panStartViewportY + dy);
+        };
+
+        const onTouchEnd = () => {
+          this.isPanningCanvas = false;
+          this.suppressHash = false;
+          if (this.hashDirty) {
+            this.scheduleHashUpdate();
+          }
+          window.removeEventListener('touchmove', onTouchMove);
+          window.removeEventListener('touchend', onTouchEnd);
+        };
+
+        window.addEventListener('touchmove', onTouchMove);
+        window.addEventListener('touchend', onTouchEnd);
+      }
+    }
+  }
 
   protected onObjectMouseMove(event: MouseEvent, objectId: string): void {
     // Cursor affordances are handled by CSS, no need for JavaScript
@@ -674,6 +779,76 @@ export class Canvas {
       this.wheelFlushHandle = null;
     }, 150);
   }
+  
+  // Touch event handlers
+  private onTouchStart(event: TouchEvent): void {
+    this.activeTouches = event.touches.length;
+    
+    if (event.touches.length === 2) {
+      // Two-finger pinch to zoom
+      event.preventDefault();
+      this.isTouchPinching = true;
+      this.suppressHash = true;
+      
+      const touch1 = event.touches[0];
+      const touch2 = event.touches[1];
+      this.touchStartDistance = this.getTouchDistance(touch1, touch2);
+      this.touchStartZoom = this.zoom();
+    } else if (event.touches.length === 1) {
+      // Single touch - could be panning or object interaction
+      // Let the individual handlers deal with it
+    }
+  }
+  
+  private onTouchMove(event: TouchEvent): void {
+    if (event.touches.length === 2 && this.isTouchPinching) {
+      // Pinch to zoom
+      event.preventDefault();
+      
+      const touch1 = event.touches[0];
+      const touch2 = event.touches[1];
+      const currentDistance = this.getTouchDistance(touch1, touch2);
+      
+      if (this.touchStartDistance > 0) {
+        const scale = currentDistance / this.touchStartDistance;
+        const newZoom = Math.max(0.1, Math.min(5, this.touchStartZoom * scale));
+        
+        // Zoom towards midpoint between fingers
+        const midX = (touch1.clientX + touch2.clientX) / 2;
+        const midY = (touch1.clientY + touch2.clientY) / 2;
+        
+        const canvasX = (midX - this.viewportX()) / this.zoom();
+        const canvasY = (midY - this.viewportY()) / this.zoom();
+        
+        this.zoom.set(newZoom);
+        this.viewportX.set(midX - canvasX * newZoom);
+        this.viewportY.set(midY - canvasY * newZoom);
+      }
+    }
+  }
+  
+  private onTouchEnd(event: TouchEvent): void {
+    this.activeTouches = event.touches.length;
+    
+    if (event.touches.length < 2) {
+      this.isTouchPinching = false;
+      this.touchStartDistance = 0;
+      
+      if (event.touches.length === 0) {
+        // All touches ended
+        this.suppressHash = false;
+        if (this.hashDirty) {
+          this.scheduleHashUpdate();
+        }
+      }
+    }
+  }
+  
+  private getTouchDistance(touch1: Touch, touch2: Touch): number {
+    const dx = touch2.clientX - touch1.clientX;
+    const dy = touch2.clientY - touch1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
 
   protected onObjectMouseDown(event: MouseEvent, objectId: string): void {
     event.preventDefault();
@@ -765,6 +940,107 @@ export class Canvas {
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+  }
+  
+  // Touch handlers for object dragging
+  protected onObjectTouchStart(event: TouchEvent, objectId: string): void {
+    if (event.touches.length !== 1) return; // Only handle single touch
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const obj = this.objects().find(o => o.id === objectId);
+    if (!obj) return;
+    
+    const touch = event.touches[0];
+    this.isDragging = true;
+    this.suppressHash = true;
+    this.dragStartX = touch.clientX;
+    this.dragStartY = touch.clientY;
+    this.originalObject = { ...obj };
+    this.selectedObjectId.set(objectId);
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!this.isDragging || !this.originalObject || e.touches.length !== 1) return;
+      
+      const touch = e.touches[0];
+      const dx = (touch.clientX - this.dragStartX) / this.zoom();
+      const dy = (touch.clientY - this.dragStartY) / this.zoom();
+      
+      this.objects.update(objects =>
+        objects.map(o =>
+          o.id === objectId
+            ? { ...o, x: this.originalObject!.x + dx, y: this.originalObject!.y + dy }
+            : o
+        )
+      );
+    };
+
+    const onTouchEnd = () => {
+      this.isDragging = false;
+      this.originalObject = null;
+      this.suppressHash = false;
+      if (this.hashDirty) {
+        this.scheduleHashUpdate();
+      }
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove);
+    window.addEventListener('touchend', onTouchEnd);
+  }
+  
+  // Touch handlers for transform handles
+  protected onHandleTouchStart(event: TouchEvent, objectId: string, handleType: string): void {
+    if (event.touches.length !== 1) return; // Only handle single touch
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const obj = this.objects().find(o => o.id === objectId);
+    if (!obj) return;
+    
+    const touch = event.touches[0];
+    this.isTransforming = true;
+    this.suppressHash = true;
+    this.transformStartX = touch.clientX;
+    this.transformStartY = touch.clientY;
+    this.transformHandle = handleType;
+    this.originalObject = { ...obj };
+    this.rotateStartRotation = obj.rotation;
+    this.rotateStartAngle = this.getPointerAngle(obj, touch.clientX, touch.clientY);
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!this.isTransforming || !this.originalObject || e.touches.length !== 1) return;
+      
+      const touch = e.touches[0];
+      const dx = (touch.clientX - this.transformStartX) / this.zoom();
+      const dy = (touch.clientY - this.transformStartY) / this.zoom();
+      
+      if (this.transformHandle?.startsWith('rotate-')) {
+        this.handleRotate(objectId, touch.clientX, touch.clientY);
+      } else if (this.transformHandle === 'rotate') {
+        this.handleRotate(objectId, touch.clientX, touch.clientY);
+      } else if (this.transformHandle?.startsWith('scale-')) {
+        this.handleScale(objectId, dx, dy, this.transformHandle);
+      }
+    };
+
+    const onTouchEnd = () => {
+      this.isTransforming = false;
+      this.originalObject = null;
+      this.transformHandle = null;
+      this.suppressHash = false;
+      if (this.hashDirty) {
+        this.scheduleHashUpdate();
+      }
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove);
+    window.addEventListener('touchend', onTouchEnd);
   }
 
   private handleScale(objectId: string, dx: number, dy: number, handle: string): void {

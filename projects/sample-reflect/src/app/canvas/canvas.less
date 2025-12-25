@@ -483,3 +483,181 @@
     }
   }
 }
+
+// Mobile-specific styles
+@media (max-width: 768px) {
+  // Improve touch targets for mobile
+  .canvas-object {
+    .handle.handle-corner {
+      width: 20px;
+      height: 20px;
+      
+      &.handle-nw {
+        top: -10px;
+        left: -10px;
+      }
+      
+      &.handle-ne {
+        top: -10px;
+        right: -10px;
+      }
+      
+      &.handle-sw {
+        bottom: -10px;
+        left: -10px;
+      }
+      
+      &.handle-se {
+        bottom: -10px;
+        right: -10px;
+      }
+    }
+    
+    // Make edge handles wider for touch
+    .handle.handle-edge {
+      &.handle-w,
+      &.handle-e {
+        width: 16px;
+        left: -8px;
+      }
+      
+      &.handle-e {
+        right: -8px;
+        left: auto;
+      }
+      
+      &.handle-n,
+      &.handle-s {
+        height: 16px;
+        top: -8px;
+      }
+      
+      &.handle-s {
+        bottom: -8px;
+        top: auto;
+      }
+    }
+    
+    // Larger rotation indicators for touch
+    .rotation-indicator {
+      width: 32px;
+      height: 32px;
+      
+      &::before {
+        width: 8px;
+        height: 8px;
+      }
+      
+      &.rotation-nw {
+        top: -40px;
+        left: -40px;
+      }
+      
+      &.rotation-ne {
+        top: -40px;
+        right: -40px;
+      }
+      
+      &.rotation-sw {
+        bottom: -40px;
+        left: -40px;
+      }
+      
+      &.rotation-se {
+        bottom: -40px;
+        right: -40px;
+      }
+    }
+    
+    // Larger toggle buttons for touch
+    .display-mode-toggle {
+      top: -60px;
+      padding: 6px;
+      gap: 6px;
+      
+      .toggle-btn {
+        width: 44px;
+        height: 44px;
+        
+        svg {
+          width: 20px;
+          height: 20px;
+        }
+      }
+    }
+  }
+  
+  // Adjust instruction text for mobile
+  .canvas-instructions {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    padding: 10px 16px;
+    
+    p {
+      font-size: 12px;
+      line-height: 1.4;
+      text-align: center;
+    }
+  }
+  
+  // Make zoom controls more touch-friendly
+  .zoom-controls {
+    bottom: 16px;
+    padding: 10px 16px;
+    gap: 12px;
+    
+    .zoom-counter {
+      font-size: 16px;
+      min-width: 60px;
+    }
+    
+    .zoom-reset {
+      padding: 10px 16px;
+      font-size: 14px;
+      min-height: 44px;
+    }
+  }
+  
+  // Stack share controls on mobile and increase touch targets
+  .share-controls {
+    bottom: 80px;
+    right: 16px;
+    flex-direction: column;
+    padding: 10px;
+    gap: 8px;
+    
+    .download-button,
+    .share-button {
+      padding: 12px 20px;
+      font-size: 14px;
+      min-height: 44px;
+      min-width: 100px;
+    }
+  }
+}
+
+// Very small mobile screens (e.g., iPhone SE)
+@media (max-width: 375px) {
+  .canvas-instructions {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    padding: 8px 12px;
+    
+    p {
+      font-size: 11px;
+    }
+  }
+  
+  .zoom-controls {
+    bottom: 12px;
+    padding: 8px 12px;
+  }
+  
+  .share-controls {
+    bottom: 70px;
+    right: 12px;
+  }
+}
