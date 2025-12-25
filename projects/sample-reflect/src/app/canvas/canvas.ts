@@ -37,6 +37,8 @@ export class Canvas {
   private readonly baseSize = 200;
   private readonly dataTokenPrefix = 'data-token-';
   private readonly dataFilePrefix = 'file-data-';
+  private readonly minZoom = 0.1;
+  private readonly maxZoom = 5;
   private hashUpdateHandle: number | null = null;
   private readonly hashThrottleMs = 80;
   private lastSerializedHash = '';
@@ -252,10 +254,8 @@ export class Canvas {
     const userAgent = navigator.userAgent.toLowerCase();
     const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
     
-    // Consider it mobile if:
-    // 1. Small screen, OR
-    // 2. Small screen + touch support, OR
-    // 3. Mobile user agent + touch support
+    // Consider it mobile if screen is small (primary condition for responsive design)
+    // OR if it's a mobile device with touch support
     return isSmallScreen || (hasTouchScreen && isMobileUA);
   }
 
@@ -602,8 +602,8 @@ export class Canvas {
     if (event.touches.length === 2) {
       const target = event.target as HTMLElement;
       const isBackgroundTouch = target === event.currentTarget || 
-                                 target.classList.contains('dot-grid') ||
-                                 target.classList.contains('canvas-objects');
+                                 (target?.classList && (target.classList.contains('dot-grid') ||
+                                  target.classList.contains('canvas-objects')));
       
       if (isBackgroundTouch) {
         event.preventDefault();
@@ -751,7 +751,7 @@ export class Canvas {
     
     const delta = event.deltaY;
     const zoomFactor = delta > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.1, Math.min(5, this.zoom() * zoomFactor));
+    const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoom() * zoomFactor));
     
     // Zoom towards mouse position
     const mouseX = event.clientX;
@@ -811,7 +811,7 @@ export class Canvas {
       
       if (this.touchStartDistance > 0) {
         const scale = currentDistance / this.touchStartDistance;
-        const newZoom = Math.max(0.1, Math.min(5, this.touchStartZoom * scale));
+        const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.touchStartZoom * scale));
         
         // Zoom towards midpoint between fingers
         const midX = (touch1.clientX + touch2.clientX) / 2;
@@ -1438,7 +1438,7 @@ export class Canvas {
         const [vx, vy, vz] = transformPart.split(',').map(parseFloat);
         if (!Number.isNaN(vx)) nextViewportX = vx;
         if (!Number.isNaN(vy)) nextViewportY = vy;
-        if (!Number.isNaN(vz)) nextZoom = Math.max(0.1, Math.min(5, vz));
+        if (!Number.isNaN(vz)) nextZoom = Math.max(this.minZoom, Math.min(this.maxZoom, vz));
         continue;
       }
 
