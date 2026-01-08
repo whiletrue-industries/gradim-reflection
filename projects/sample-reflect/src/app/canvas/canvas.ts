@@ -351,11 +351,21 @@ export class Canvas {
         'www.youtube.com': 'https://www.youtube.com/img/desktop/yt_1200.png',
       };
       
-      const ogImage = devOgImages[hostname];
+      let ogImage = devOgImages[hostname];
+
+      // Gradim Wall heuristic (mirrors server-side extraction)
+      if (!ogImage && hostname === 'gradim-wall.netlify.app') {
+        const segments = urlObj.pathname.split('/').filter(Boolean);
+        const id = decodeURIComponent(segments[segments.length - 1] || '');
+        if (id && /^[A-Za-z0-9_\-]+$/.test(id)) {
+          ogImage = `https://gradim.fh-potsdam.de/omeka-s/files/large/${id}.jpg`;
+        }
+      }
+
       if (ogImage) {
         // Set after a short delay to simulate API fetch
         setTimeout(() => {
-          this.updateObjectOgImage(objectId, ogImage);
+          this.updateObjectOgImage(objectId, ogImage as string);
         }, 500);
       }
     } catch (error) {
