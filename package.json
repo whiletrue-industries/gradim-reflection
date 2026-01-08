@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
+    "start": "node scripts/start.js",
     "start:main": "ng serve main --port 4200 --host 0.0.0.0",
     "start:sample": "ng serve sample-reflect --port 4201 --host 0.0.0.0",
     "build": "ng build",

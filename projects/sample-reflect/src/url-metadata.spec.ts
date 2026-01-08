@@ -45,4 +45,11 @@ describe('extractPreviewImage', () => {
     const out = extractPreviewImage(html, 'https://projects.btselem.org/nibal/');
     expect(out).toBe('https://projects.btselem.org/nibal/img/cover.png');
   });
+  
+    it('maps gradim-wall links to Omeka-S large image', () => {
+      const html = `<!doctype html><html><head><title>Gradim Wall</title></head><body></body></html>`;
+      const page = 'https://gradim-wall.netlify.app/FB_P_USA_80002_0130_030';
+      const out = extractPreviewImage(html, page);
+      expect(out).toBe('https://gradim.fh-potsdam.de/omeka-s/files/large/FB_P_USA_80002_0130_030.jpg');
+    });
 });

@@ -26,7 +26,26 @@ export function extractPreviewImage(html: string, pageUrl: string): string | nul
     }
   }
 
-  if (!raw) return null;
+  if (!raw) {
+    // Heuristic: Gradim Wall links map to Omeka-S large images
+    // Example:
+    //  Page: https://gradim-wall.netlify.app/FB_P_USA_80002_0130_030
+    //  Image: https://gradim.fh-potsdam.de/omeka-s/files/large/FB_P_USA_80002_0130_030.jpg
+    try {
+      const u = new URL(pageUrl);
+      const host = u.hostname.toLowerCase();
+      if (host === 'gradim-wall.netlify.app') {
+        const segs = u.pathname.split('/').filter(Boolean);
+        const id = decodeURIComponent(segs[segs.length - 1] || '');
+        if (id && /^[A-Za-z0-9_\-]+$/.test(id)) {
+          return `https://gradim.fh-potsdam.de/omeka-s/files/large/${id}.jpg`;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
 
   try {
     const base = new URL(pageUrl);

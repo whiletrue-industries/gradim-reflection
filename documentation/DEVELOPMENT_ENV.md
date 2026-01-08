@@ -41,7 +41,7 @@ npm run build -- common
 
 #### Main Application
 ```bash
-npm start
+npm start main
 ```
 or
 ```bash
@@ -51,6 +51,10 @@ ng serve main
 The main app will be available at `http://localhost:4200`
 
 #### Sample-Reflect Application (Standalone)
+```bash
+npm start sample-reflect
+```
+or run SSR API alongside the dev server:
 ```bash
 # One command: builds SSR and starts both SSR API + dev server
 npm run dev:sample
