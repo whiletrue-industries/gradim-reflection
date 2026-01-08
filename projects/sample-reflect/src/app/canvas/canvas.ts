@@ -366,33 +366,49 @@ export class Canvas {
     // Only try server-side endpoint - client-side CORS fetch fails for most sites
     // and generates noisy console errors that confuse users
     try {
-      const response = await fetch(`/api/url-metadata?url=${encodeURIComponent(url)}`);
+      const apiUrl = `/api/url-metadata?url=${encodeURIComponent(url)}`;
+      console.log('[Canvas] fetchOgImage: calling', apiUrl);
+      const response = await fetch(apiUrl);
+      console.log('[Canvas] fetchOgImage: response status', response.status, response.statusText);
       
       // Check if we got a valid JSON response (not HTML 404)
       const contentType = response.headers.get('content-type');
+      console.log('[Canvas] fetchOgImage: content-type', contentType);
+      
       if (response.ok && contentType?.includes('application/json')) {
         const data = await response.json();
+        console.log('[Canvas] fetchOgImage: received data:', data);
         if (data.ogImage) {
+          console.log('[Canvas] fetchOgImage: setting og:image:', data.ogImage);
           this.updateObjectOgImage(objectId, data.ogImage);
           ogImageFetched = true;
+        } else {
+          console.log('[Canvas] fetchOgImage: no ogImage in response');
         }
+      } else {
+        console.log('[Canvas] fetchOgImage: not OK or not JSON, falling back to dev mode');
       }
     } catch (error) {
       // API endpoint not available (dev mode) or failed
+      console.log('[Canvas] fetchOgImage: fetch failed, will try fallback:', error);
     }
     
     // If og:image wasn't fetched from API, try development fallback
     if (!ogImageFetched) {
+      console.log('[Canvas] fetchOgImage: no og:image from API, trying dev fallback');
       this.trySetDevelopmentOgImage(url, objectId);
     }
   }
 
   private trySetDevelopmentOgImage(url: string, objectId: string): void {
     // In development mode, set known og:images for common domains to enable testing
+    // NOTE: This is only a fallback when the API endpoint (/api/url-metadata) is not available.
+    // To fetch og:image for arbitrary URLs, run: npm run dev:sample
+    // (This starts both the SSR server on port 4000 and the dev server on port 4201)
     try {
       const urlObj = new URL(url);
       const hostname = urlObj.hostname.toLowerCase();
-      
+
       // Map of common domains to their og:image URLs (for development testing only)
       const devOgImages: Record<string, string> = {
         'github.com': 'https://github.githubassets.com/images/modules/site/social-cards/github-social.png',
@@ -400,16 +416,31 @@ export class Canvas {
         'youtube.com': 'https://www.youtube.com/img/desktop/yt_1200.png',
         'www.youtube.com': 'https://www.youtube.com/img/desktop/yt_1200.png',
       };
-      
-      const ogImage = devOgImages[hostname];
+
+      let ogImage = devOgImages[hostname];
+
+      // Gradim Wall heuristic (mirrors server-side extraction)
+      if (!ogImage && hostname === 'gradim-wall.netlify.app') {
+        const segments = urlObj.pathname.split('/').filter(Boolean);
+        const id = decodeURIComponent(segments[segments.length - 1] || '');
+        if (id && /^[A-Za-z0-9_\-]+$/.test(id)) {
+          ogImage = `https://gradim.fh-potsdam.de/omeka-s/files/large/${id}.jpg`;
+        }
+      }
+
       if (ogImage) {
+        console.log('[Canvas] trySetDevelopmentOgImage: using hardcoded/heuristic og:image for', hostname, ':', ogImage);
         // Set after a short delay to simulate API fetch
         setTimeout(() => {
-          this.updateObjectOgImage(objectId, ogImage);
+          this.updateObjectOgImage(objectId, ogImage as string);
         }, 500);
+      } else {
+        console.log('[Canvas] trySetDevelopmentOgImage: no hardcoded og:image for', hostname, 
+          '- API endpoint (/api/url-metadata) is required to fetch og:image for arbitrary URLs');
       }
     } catch (error) {
       // Invalid URL or other error - silently ignore
+      console.error('[Canvas] trySetDevelopmentOgImage: error:', error);
     }
   }
 
