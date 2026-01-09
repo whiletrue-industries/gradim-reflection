@@ -211,6 +211,11 @@ export class Canvas {
         this.applyHashState(hashToRestore);
       }
       this.suppressHash = false;
+      
+      // Clean up orphaned localStorage entries after initial load
+      afterNextRender(() => {
+        this.cleanupOrphanedStorage();
+      });
     }
   }
 
@@ -236,7 +241,18 @@ export class Canvas {
       return;
     }
 
-    if (currentHash === this.lastSerializedHash) return;
+    // CRITICAL: Only apply external hash changes, not our own writes
+    // Check both lastSerializedHash (what we scheduled to write) and actual current signals
+    const currentSerialized = this.serializeStateToHash();
+    const currentPrefixed = currentSerialized ? `#${currentSerialized}` : '';
+    
+    // If current hash matches what we just serialized, this is our own write - ignore it
+    if (currentHash === currentPrefixed || currentHash === this.lastSerializedHash) {
+      console.log('[Canvas] onHashChange - ignoring our own write');
+      return;
+    }
+    
+    console.log('[Canvas] onHashChange - external change detected, applying');
     this.applyHashState(currentHash);
     this.lastSerializedHash = currentHash;
   };
@@ -658,15 +674,14 @@ export class Canvas {
     event.preventDefault();
     
     // Find and clean up the object from localStorage before deleting
-      this.suppressHash = true; // Suppress hash during object drag
     const objectToDelete = this.objects().find(o => o.id === selectedId);
     if (objectToDelete) {
       this.cleanupObjectStorage(objectToDelete);
     }
     
+    // Update objects signal - this will trigger effect and scheduleHashUpdate
     this.objects.update(objects => objects.filter(o => o.id !== selectedId));
     this.selectedObjectId.set(null);
-    this.scheduleHashUpdate();
   }
 
   protected onObjectClick(event: MouseEvent, objectId: string): void {
@@ -1634,16 +1649,10 @@ export class Canvas {
     this.hashUpdateHandle = window.setTimeout(() => {
       const hash = this.serializeStateToHash();
       const prefixedHash = hash ? `#${hash}` : '';
-      console.log('[Canvas] scheduleHashUpdate - serialized hash:', prefixedHash);
-      const currentHash = window.location.hash || '';
-      // Never overwrite a richer hash with a shorter one (prevents accidental loss of objects when multiple updates race)
-      if (currentHash && currentHash.length > prefixedHash.length) {
-        console.log('[Canvas] scheduleHashUpdate - skip write because current hash is longer (preserve data)');
-        this.hashDirty = false;
-        this.hashUpdateHandle = null;
-        return;
-      }
-      // Only write if changed to avoid unnecessary hashchange events
+      console.log('[Canvas] scheduleHashUpdate - serialized hash:', prefixedHash.substring(0, 100) + '...');
+      
+      // Only write if changed from what we last wrote (not from current URL hash)
+      // This prevents echo writes but allows all legitimate state changes
       if (prefixedHash !== this.lastSerializedHash) {
         console.log('[Canvas] scheduleHashUpdate - updating hash and sessionStorage');
         window.location.hash = prefixedHash;
@@ -1651,6 +1660,8 @@ export class Canvas {
         try {
           sessionStorage.setItem('canvasLastHash', prefixedHash);
         } catch {}
+      } else {
+        console.log('[Canvas] scheduleHashUpdate - skipping, hash unchanged');
       }
       this.hashDirty = false;
       this.hashUpdateHandle = null;
@@ -1910,6 +1921,55 @@ export class Canvas {
         // Ignore errors
       }
       this.ephemeralTokens.delete(tokenId);
+    }
+  }
+
+  private cleanupOrphanedStorage(): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    
+    try {
+      // Collect all sourceRefs currently in use
+      const activeRefs = new Set<string>();
+      for (const obj of this.objects()) {
+        activeRefs.add(obj.sourceRef);
+      }
+      
+      console.log('[Canvas] cleanupOrphanedStorage - active refs:', activeRefs);
+      
+      // Scan localStorage for our prefixed keys
+      const keysToRemove: string[] = [];
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        
+        // Check if it's one of our keys
+        if (key.startsWith(this.dataTokenPrefix)) {
+          // Token-based entry: check if 'token:KEY' is referenced
+          const ref = `token:${key}`;
+          if (!activeRefs.has(ref)) {
+            keysToRemove.push(key);
+          }
+        } else if (key.startsWith(this.dataFilePrefix)) {
+          // File-based entry: extract filename and check if referenced
+          const filename = key.substring(this.dataFilePrefix.length);
+          if (!activeRefs.has(filename)) {
+            keysToRemove.push(key);
+          }
+        }
+      }
+      
+      // Remove orphaned entries
+      if (keysToRemove.length > 0) {
+        console.log('[Canvas] cleanupOrphanedStorage - removing orphaned entries:', keysToRemove);
+        for (const key of keysToRemove) {
+          localStorage.removeItem(key);
+        }
+      } else {
+        console.log('[Canvas] cleanupOrphanedStorage - no orphaned entries found');
+      }
+    } catch (e) {
+      console.error('[Canvas] cleanupOrphanedStorage - error:', e);
     }
   }
 
