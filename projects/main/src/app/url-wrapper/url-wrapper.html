@@ -1,0 +1,24 @@
+<div class="url-wrapper-container">
+  @if (safeUrl()) {
+    <div class="iframe-container">
+      <iframe 
+        [src]="safeUrl()" 
+        class="wrapped-iframe"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+      ></iframe>
+    </div>
+    
+    <div class="share-button-container">
+      <button class="share-button" (click)="onShare()">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M15 8a3 3 0 1 0-2.977-2.63l-4.94 2.47a3 3 0 1 0 0 4.319l4.94 2.47a3 3 0 1 0 .895-1.789l-4.94-2.47a3.027 3.027 0 0 0 0-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+        </svg>
+        <span>Open in Canvas</span>
+      </button>
+    </div>
+  } @else {
+    <div class="no-url-message">
+      <p>No URL provided. Add ?url=YOUR_URL to the address bar.</p>
+    </div>
+  }
+</div>
