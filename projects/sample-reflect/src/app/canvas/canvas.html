@@ -203,26 +203,18 @@
     }
   </div>
 
-  <!-- Mobile-only consolidated share button with menu -->
+  <!-- Mobile-only share button -->
   <div class="share-fab" (click)="$event.stopPropagation()">
     <button
       class="share-main"
-      aria-haspopup="true"
-      [attr.aria-expanded]="shareMenuOpen() ? 'true' : 'false'"
       [disabled]="objects().length === 0"
       [attr.aria-label]="'Share'"
-      (click)="toggleShareMenu()"
+      (click)="onShareClick()"
     >
       <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
         <path d="M13.5 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM11 2.5a2.5 2.5 0 1 1 .603 1.628l-6.718 3.12a2.499 2.499 0 0 1 0 1.504l6.718 3.12a2.5 2.5 0 1 1-.488.876l-6.718-3.12a2.5 2.5 0 1 1 0-3.256l6.718-3.12A2.5 2.5 0 0 1 11 2.5zm-8.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm11 5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/>
       </svg>
     </button>
-    @if (shareMenuOpen()) {
-      <div class="share-menu" role="menu">
-        <button role="menuitem" (click)="onShareDownloadClick()" [disabled]="objects().length === 0">Download</button>
-        <button role="menuitem" (click)="onShareNativeClick()" [disabled]="objects().length === 0">Share</button>
-      </div>
-    }
   </div>
   
   <div class="canvas-instructions">

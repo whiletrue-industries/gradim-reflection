@@ -175,20 +175,16 @@ export class Canvas {
       try {
         const currentUrlHash = window.location.hash;
         const storedHash = sessionStorage.getItem('canvasLastHash');
-        console.log('[Canvas] Constructor - currentUrlHash:', currentUrlHash);
-        console.log('[Canvas] Constructor - storedHash:', storedHash);
         
         // If URL hash is explicitly empty but sessionStorage has a value,
         // the user deliberately cleared it → respect that by clearing storage and skipping restore
         if ((!currentUrlHash || currentUrlHash === '#') && storedHash) {
-          console.log('[Canvas] Constructor - hash was cleared by user, removing sessionStorage');
           sessionStorage.removeItem('canvasLastHash');
           this.skipNextHashWrite = true;
           hashToRestore = ''; // Don't restore anything
         } else if (storedHash) {
           // Use the properly encoded version from sessionStorage
           hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
-          console.log('[Canvas] Constructor - using hash from sessionStorage:', hashToRestore);
           
           // Update window.location to use the properly encoded version
           if (hashToRestore !== currentUrlHash) {
@@ -197,16 +193,13 @@ export class Canvas {
         } else if (currentUrlHash) {
           // No stored hash, but URL has one → use it
           hashToRestore = currentUrlHash;
-          console.log('[Canvas] Constructor - using hash from window.location:', hashToRestore);
         }
       } catch (e) {
-        console.error('[Canvas] Constructor - error accessing sessionStorage:', e);
         hashToRestore = window.location.hash;
       }
       
       // Suppress hash writes during initial state restoration
       this.suppressHash = true;
-      console.log('[Canvas] Constructor - applying hash state:', hashToRestore);
       if (hashToRestore) {
         this.applyHashState(hashToRestore);
       }
@@ -474,13 +467,11 @@ export class Canvas {
     // Gradim Wall: derive og:image directly, skip API entirely
     const gradimOg = this.getGradimWallOgImage(url);
     if (gradimOg) {
-      console.log('[Canvas] fetchOgImage: Gradim Wall detected, using direct og heuristic');
       this.updateObjectOgImage(objectId, gradimOg);
       return;
     }
 
     if (!isLocalHost) {
-      console.log('[Canvas] fetchOgImage: non-local host detected, skipping API and using fallback:', host);
       this.trySetDevelopmentOgImage(url, objectId);
       return;
     }
@@ -491,35 +482,24 @@ export class Canvas {
     // and generates noisy console errors that confuse users
     try {
       const apiUrl = `/api/url-metadata?url=${encodeURIComponent(url)}`;
-      console.log('[Canvas] fetchOgImage: calling', apiUrl);
       const response = await fetch(apiUrl);
-      console.log('[Canvas] fetchOgImage: response status', response.status, response.statusText);
       
       // Check if we got a valid JSON response (not HTML 404)
       const contentType = response.headers.get('content-type');
-      console.log('[Canvas] fetchOgImage: content-type', contentType);
       
       if (response.ok && contentType?.includes('application/json')) {
         const data = await response.json();
-        console.log('[Canvas] fetchOgImage: received data:', data);
         if (data.ogImage) {
-          console.log('[Canvas] fetchOgImage: setting og:image:', data.ogImage);
           this.updateObjectOgImage(objectId, data.ogImage);
           ogImageFetched = true;
-        } else {
-          console.log('[Canvas] fetchOgImage: no ogImage in response');
         }
-      } else {
-        console.log('[Canvas] fetchOgImage: not OK or not JSON, status:', response.status, 'falling back to dev mode');
       }
     } catch (error) {
       // API endpoint not available (dev mode) or failed
-      console.log('[Canvas] fetchOgImage: fetch failed, will try fallback. Error:', error);
     }
     
     // If og:image wasn't fetched from API, try development fallback
     if (!ogImageFetched) {
-      console.log('[Canvas] fetchOgImage: no og:image from API, trying dev fallback');
       this.trySetDevelopmentOgImage(url, objectId);
     }
   }
@@ -549,18 +529,13 @@ export class Canvas {
       }
 
       if (ogImage) {
-        console.log('[Canvas] trySetDevelopmentOgImage: using hardcoded/heuristic og:image for', hostname, ':', ogImage);
         // Set after a short delay to simulate API fetch
         setTimeout(() => {
           this.updateObjectOgImage(objectId, ogImage as string);
         }, 500);
-      } else {
-        console.log('[Canvas] trySetDevelopmentOgImage: no hardcoded og:image for', hostname, 
-          '- API endpoint (/api/url-metadata) is required to fetch og:image for arbitrary URLs');
       }
     } catch (error) {
       // Invalid URL or other error - silently ignore
-      console.error('[Canvas] trySetDevelopmentOgImage: error:', error);
     }
   }
 
@@ -977,20 +952,13 @@ export class Canvas {
     }, 300); // Increased from 150ms for more robust handling
   }
 
-  // Share menu helpers (mobile)
-  protected toggleShareMenu(): void {
-    this.shareMenuOpen.update(v => !v);
-    if (this.shareMenuOpen()) {
-      this.addMenuOpen.set(false);
+  // Share (mobile)
+  protected async onShareClick(): Promise<void> {
+    try {
+      await this.shareComposition();
+    } catch (error) {
+      console.error('Failed to share composition:', error);
     }
-  }
-  protected onShareDownloadClick(): void {
-    this.downloadImage();
-    this.shareMenuOpen.set(false);
-  }
-  protected onShareNativeClick(): void {
-    this.shareImage();
-    this.shareMenuOpen.set(false);
   }
   
   // Add menu helpers (mobile)
@@ -1022,11 +990,8 @@ export class Canvas {
     this.showUrlModal.set(false);
     
     if (!url) {
-      console.log('[Canvas] No URL provided');
       return;
     }
-    
-    console.log('[Canvas] Adding URL:', url);
     this.addIframeFromUrl(url);
   }
   
@@ -1936,8 +1901,6 @@ export class Canvas {
         activeRefs.add(obj.sourceRef);
       }
       
-      console.log('[Canvas] cleanupOrphanedStorage - active refs:', activeRefs);
-      
       // Scan localStorage for our prefixed keys
       const keysToRemove: string[] = [];
       
@@ -1963,15 +1926,12 @@ export class Canvas {
       
       // Remove orphaned entries
       if (keysToRemove.length > 0) {
-        console.log('[Canvas] cleanupOrphanedStorage - removing orphaned entries:', keysToRemove);
         for (const key of keysToRemove) {
           localStorage.removeItem(key);
         }
-      } else {
-        console.log('[Canvas] cleanupOrphanedStorage - no orphaned entries found');
       }
     } catch (e) {
-      console.error('[Canvas] cleanupOrphanedStorage - error:', e);
+      // Silently ignore errors
     }
   }
 
@@ -2022,12 +1982,71 @@ export class Canvas {
     }
   }
 
+  protected async shareComposition(): Promise<void> {
+    try {
+      const blob = await this.renderCompositionToBlob();
+      if (!blob) return;
+
+      // Try to use Web Share API if available (iOS Safari supports this)
+      if (navigator.share) {
+        console.log('Share API available, creating file...');
+        const file = new File([blob], 'composition.png', { type: 'image/png' });
+        
+        // iOS Safari limitation: when sharing files, can't include url/text
+        // Share just the image file to enable "Save Image" option
+        const shareData: ShareData = {
+          files: [file],
+        };
+
+        console.log('Attempting to share with data:', shareData);
+        try {
+          await navigator.share(shareData);
+          console.log('Share successful');
+          return;
+        } catch (shareError) {
+          // User cancelled or share failed - fall through to download
+          console.error('Share failed with error:', shareError);
+        }
+      } else {
+        console.log('Share API not available, falling back to download');
+      }
+
+      // Fallback: download the image if share is not available or was cancelled
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.download = `composition-${timestamp}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error sharing composition:', error);
+    }
+  }
+
   protected async downloadImage(): Promise<void> {
     try {
       const blob = await this.renderCompositionToBlob();
       if (!blob) return;
 
-      // Download the image
+      // On mobile/iOS, prefer Web Share API to enable saving to photo library
+      if (this.isMobile() && navigator.share) {
+        const file = new File([blob], 'composition.png', { type: 'image/png' });
+        const shareData: ShareData = {
+          files: [file],
+          title: 'Composition',
+        };
+
+        try {
+          await navigator.share(shareData);
+          return;
+        } catch (shareError) {
+          // User cancelled or share not supported - fall through to download
+          console.log('Share cancelled or failed:', shareError);
+        }
+      }
+
+      // Desktop: download the image
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -2044,21 +2063,24 @@ export class Canvas {
       const blob = await this.renderCompositionToBlob();
       if (!blob) return;
 
-      // Try to use Web Share API if available
-      if (navigator.share && navigator.canShare) {
+      // Try to use Web Share API if available (iOS Safari supports this)
+      if (navigator.share) {
         const file = new File([blob], 'composition.png', { type: 'image/png' });
-        const shareData = {
+        const shareData: ShareData = {
           files: [file],
           title: 'My Composition',
         };
 
-        if (navigator.canShare(shareData)) {
+        try {
           await navigator.share(shareData);
           return;
+        } catch (shareError) {
+          // User cancelled or share failed - fall through to download
+          console.log('Share cancelled or failed:', shareError);
         }
       }
 
-      // Fallback: download the image if share is not available
+      // Fallback: download the image if share is not available or was cancelled
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
