@@ -224,13 +224,19 @@ export class Canvas {
     // Add URL as an iframe object centered on the canvas
     const centerX = this.defaultViewportWidth / 2 - this.defaultIframeWidth / 2;
     const centerY = this.defaultViewportHeight / 2 - this.defaultIframeHeight / 2;
-    const aspectRatio = this.defaultIframeHeight / this.defaultIframeWidth;
+    // Guard against division by zero
+    const aspectRatio = this.defaultIframeWidth > 0 
+      ? this.defaultIframeHeight / this.defaultIframeWidth 
+      : 1;
+    
+    // Use current zoom or default to 1 if invalid
+    const currentZoom = this.zoom() || 1;
     
     const newObject: CanvasObject = {
       id: this.generateId(),
       type: 'iframe',
-      x: centerX / this.zoom(),
-      y: centerY / this.zoom(),
+      x: centerX / currentZoom,
+      y: centerY / currentZoom,
       width: this.defaultIframeWidth,
       height: this.defaultIframeHeight,
       rotation: 0,

@@ -34,7 +34,8 @@ export class UrlWrapper {
     if (!currentUrl) return;
 
     // Store the URL in sessionStorage with a unique key
-    const urlKey = `pending-canvas-url-${Date.now()}`;
+    // Using crypto.randomUUID() for better uniqueness guarantees
+    const urlKey = `pending-canvas-url-${crypto.randomUUID()}`;
     try {
       sessionStorage.setItem(urlKey, currentUrl);
       console.log('[URL Wrapper] Stored URL with key:', urlKey, 'URL:', currentUrl);
