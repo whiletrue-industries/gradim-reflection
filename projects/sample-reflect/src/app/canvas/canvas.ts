@@ -75,6 +75,10 @@ export class Canvas {
   protected viewportX = signal(0);
   protected viewportY = signal(0);
   protected zoom = signal(1);
+  // Share menu (mobile)
+  protected shareMenuOpen = signal(false);
+  // Add menu (mobile)
+  protected addMenuOpen = signal(false);
   
   // Iframe interaction state
   protected hoveredIframeId = signal<string | null>(null);
@@ -347,6 +351,60 @@ export class Canvas {
       
       event.preventDefault();
     }
+  }
+
+  // File picker (mobile upload)
+  protected onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files && input.files[0];
+    if (!file || !file.type.startsWith('image/')) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = reader.result as string;
+      const sourceRef = this.deriveSourceRef(content, file.name);
+
+      const img = new Image();
+      img.onload = () => {
+        const aspectRatio = img.naturalHeight / img.naturalWidth || 1;
+        // place at current viewport center
+        const centerX = (window.innerWidth / 2 - this.viewportX()) / this.zoom();
+        const centerY = (window.innerHeight / 2 - this.viewportY()) / this.zoom();
+        this.addObject({
+          id: this.generateId(),
+          type: 'image',
+          x: centerX - this.baseSize / 2,
+          y: centerY - (this.baseSize * aspectRatio) / 2,
+          width: this.baseSize,
+          height: this.baseSize * aspectRatio,
+          rotation: 0,
+          content,
+          sourceRef,
+          originalAspectRatio: aspectRatio,
+        });
+      };
+      img.onerror = () => {
+        const centerX = (window.innerWidth / 2 - this.viewportX()) / this.zoom();
+        const centerY = (window.innerHeight / 2 - this.viewportY()) / this.zoom();
+        this.addObject({
+          id: this.generateId(),
+          type: 'image',
+          x: centerX - this.baseSize / 2,
+          y: centerY - this.baseSize / 2,
+          width: this.baseSize,
+          height: this.baseSize,
+          rotation: 0,
+          content,
+          sourceRef,
+          originalAspectRatio: 1,
+        });
+      };
+      img.src = content;
+    };
+    reader.readAsDataURL(file);
+    // reset input value so same file can be picked again if desired
+    input.value = '';
   }
 
   private isValidUrl(string: string): boolean {
@@ -769,10 +827,44 @@ export class Canvas {
     this.gridScale.set(bestScale);
   }
 
-  protected resetZoom(): void {
-    this.zoom.set(1);
-    this.viewportX.set(0);
-    this.viewportY.set(0);
+  protected fitToView(): void {
+    const objs = this.objects();
+    if (objs.length === 0) {
+      // No objects, just reset to default
+      this.zoom.set(1);
+      this.viewportX.set(0);
+      this.viewportY.set(0);
+      return;
+    }
+
+    // Calculate bounding box of all objects
+    const bounds = this.calculateCompositionBounds();
+    if (!bounds) {
+      this.zoom.set(1);
+      this.viewportX.set(0);
+      this.viewportY.set(0);
+      return;
+    }
+
+    // Add padding around objects
+    const padding = 100;
+    const availableWidth = window.innerWidth - 2 * padding;
+    const availableHeight = window.innerHeight - 2 * padding;
+
+    // Calculate zoom to fit
+    const zoomX = availableWidth / bounds.width;
+    const zoomY = availableHeight / bounds.height;
+    const newZoom = Math.min(zoomX, zoomY, this.maxZoom);
+
+    // Center the composition
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
+    const viewportCenterX = window.innerWidth / 2;
+    const viewportCenterY = window.innerHeight / 2;
+
+    this.zoom.set(newZoom);
+    this.viewportX.set(viewportCenterX - centerX * newZoom);
+    this.viewportY.set(viewportCenterY - centerY * newZoom);
   }
 
   private onWheel(event: WheelEvent): void {
@@ -809,6 +901,65 @@ export class Canvas {
       }
       this.wheelFlushHandle = null;
     }, 150);
+  }
+
+  // Share menu helpers (mobile)
+  protected toggleShareMenu(): void {
+    this.shareMenuOpen.update(v => !v);
+    if (this.shareMenuOpen()) {
+      this.addMenuOpen.set(false);
+    }
+  }
+  protected onShareDownloadClick(): void {
+    this.downloadImage();
+    this.shareMenuOpen.set(false);
+  }
+  protected onShareNativeClick(): void {
+    this.shareImage();
+    this.shareMenuOpen.set(false);
+  }
+  
+  // Add menu helpers (mobile)
+  protected toggleAddMenu(): void {
+    this.addMenuOpen.update(v => !v);
+    if (this.addMenuOpen()) {
+      this.shareMenuOpen.set(false);
+    }
+  }
+  protected onAddImageClick(): void {
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fileInput?.click();
+    this.addMenuOpen.set(false);
+  }
+  protected onAddUrlClick(): void {
+    this.addMenuOpen.set(false);
+    const url = window.prompt('Paste URL');
+    if (!url) return;
+    this.addIframeFromUrl(url.trim());
+  }
+
+  private addIframeFromUrl(url: string): void {
+    if (!this.isValidUrl(url)) {
+      console.warn('Invalid URL:', url);
+      return;
+    }
+    const sourceRef = this.deriveSourceRef(url);
+    const newObject: CanvasObject = {
+      id: this.generateId(),
+      type: 'iframe',
+      x: (window.innerWidth / 2 - this.viewportX()) / this.zoom(),
+      y: (window.innerHeight / 2 - this.viewportY()) / this.zoom(),
+      width: 600,
+      height: 400,
+      rotation: 0,
+      content: url,
+      sourceRef,
+      originalAspectRatio: 400 / 600,
+      safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
+      displayMode: 'image',
+    };
+    this.addObject(newObject);
+    this.fetchOgImage(url, newObject.id);
   }
   
   // Touch event handlers
