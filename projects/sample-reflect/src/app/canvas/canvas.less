@@ -63,6 +63,8 @@
     pointer-events: none;
     display: block;
     border: none;
+    position: relative;
+    z-index: 1;
   }
 
   // Wrapper for iframes to handle hover/interaction state
@@ -182,7 +184,7 @@
   .handle {
     position: absolute;
     pointer-events: all;
-    z-index: 10;
+    z-index: 15;
     user-select: none;
     transform-origin: center;
     
@@ -269,7 +271,7 @@
     width: 20px;
     height: 20px;
     pointer-events: all;
-    z-index: 10;
+    z-index: 15;
     cursor: grab;
     
     &:hover {
@@ -327,7 +329,7 @@
     border-radius: 6px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     pointer-events: all;
-    z-index: 15;
+    z-index: 20;
     
     .toggle-btn {
       display: flex;
@@ -474,6 +476,48 @@
   &:hover {
     background-color: rgba(255, 255, 255, 0.25);
     border-color: rgba(255, 255, 255, 0.4);
+  }
+}
+
+.close-button-container {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.close-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  background-color: rgba(20, 20, 20, 0.95);
+  color: #e6e6e6;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease;
+  
+  svg {
+    width: 20px;
+    height: 20px;
+    transform: rotate(180deg); // Rotate to make arrow point left
+  }
+  
+  &:hover {
+    background-color: rgba(30, 30, 30, 0.98);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateX(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  }
+  
+  &:active {
+    transform: translateX(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   }
 }
 

@@ -47,6 +47,13 @@ export class Canvas {
   private skipNextHashWrite = false; // allow a deliberate empty-hash clear without rewriting it
   private wheelFlushHandle: number | null = null; // debounce wheel flush
   private ephemeralTokens = new Map<string, string>(); // in-memory fallback for tokens
+  
+  // Default dimensions for new URL objects
+  private readonly defaultIframeWidth = 600;
+  private readonly defaultIframeHeight = 400;
+  private readonly defaultViewportWidth = 1920;
+  private readonly defaultViewportHeight = 1080;
+  
   // 1x1 transparent PNG to keep image objects alive when content can't resolve yet
   private readonly transparentPixel =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/hsrLxkAAAAASUVORK5CYII=';
@@ -83,6 +90,10 @@ export class Canvas {
   // URL input modal
   protected showUrlModal = signal(false);
   protected urlInputValue = signal('');
+  
+  // URL wrapper navigation
+  protected cameFromUrlWrapper = signal(false);
+  protected urlWrapperUrl = signal<string | null>(null);
   
   // Iframe interaction state
   protected hoveredIframeId = signal<string | null>(null);
@@ -126,6 +137,22 @@ export class Canvas {
   private panStartViewportY = 0;
   private rotateStartAngle = 0;
   private rotateStartRotation = 0;
+  private viewAnimationFrame: number | null = null;
+  private pendingInitialFitTimeout: number | null = null;
+  private pendingFitAfterImageLoad = false;
+  // UI chrome safe areas (px) to improve visual centering
+  private readonly safeInsetTop = 20;
+  private readonly safeInsetBottom = 100;
+  private readonly safeInsetLeft = 20;
+  private readonly safeInsetRight = 20;
+
+  private getVisibleViewportMetrics() {
+    const width = Math.max(0, window.innerWidth - this.safeInsetLeft - this.safeInsetRight);
+    const height = Math.max(0, window.innerHeight - this.safeInsetTop - this.safeInsetBottom);
+    const centerX = this.safeInsetLeft + width / 2;
+    const centerY = this.safeInsetTop + height / 2;
+    return { width, height, centerX, centerY };
+  }
   
   protected readonly transformHandles: TransformHandle[] = [
     { type: 'scale-nw', cursor: 'nw-resize' },
@@ -208,7 +235,146 @@ export class Canvas {
       // Clean up orphaned localStorage entries after initial load
       afterNextRender(() => {
         this.cleanupOrphanedStorage();
+        
+        // Check for loadUrl query parameter (from URL wrapper)
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const loadUrlKey = urlParams.get('loadUrl');
+          if (loadUrlKey) {
+            const urlToLoad = sessionStorage.getItem(loadUrlKey);
+            if (urlToLoad) {
+              // Mark that we came from URL wrapper
+              this.cameFromUrlWrapper.set(true);
+              this.urlWrapperUrl.set(urlToLoad);
+              
+              // Clean up the stored URL
+              sessionStorage.removeItem(loadUrlKey);
+              // Add the URL as an object on the canvas
+              this.addUrlObject(urlToLoad);
+              // Defer fitting until og:image is ready; fallback if it never arrives
+              if (this.pendingInitialFitTimeout !== null) {
+                window.clearTimeout(this.pendingInitialFitTimeout);
+              }
+              this.pendingInitialFitTimeout = window.setTimeout(() => {
+                // Fallback fit if og:image wasn't fetched
+                if (this.pendingInitialFitTimeout !== null) {
+                  this.animateFitToContent();
+                  this.pendingInitialFitTimeout = null;
+                }
+              }, 1500);
+              // Clean up the query parameter from the URL
+              urlParams.delete('loadUrl');
+              const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
+              window.history.replaceState(null, '', newUrl);
+            }
+          }
+        } catch (e) {
+          // Silently handle errors in URL loading
+        }
       });
+    }
+  }
+
+  private addUrlObject(url: string): void {
+    // Add URL as an iframe object centered on the canvas
+    const centerX = this.defaultViewportWidth / 2 - this.defaultIframeWidth / 2;
+    const centerY = this.defaultViewportHeight / 2 - this.defaultIframeHeight / 2;
+    // Guard against division by zero
+    const aspectRatio = this.defaultIframeWidth > 0
+      ? this.defaultIframeHeight / this.defaultIframeWidth
+      : 1;
+
+    // Use current zoom or default to 1 if invalid
+    const currentZoom = this.zoom() || 1;
+
+    const newObject: CanvasObject = {
+      id: this.generateId(),
+      type: 'iframe',
+      x: centerX / currentZoom,
+      y: centerY / currentZoom,
+      width: this.defaultIframeWidth,
+      height: this.defaultIframeHeight,
+      rotation: 0,
+      content: url,
+      sourceRef: url,
+      originalAspectRatio: aspectRatio,
+      safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
+      displayMode: 'image', // Default to image view (og:image preview)
+    };
+
+    this.addObject(newObject);
+
+    // Fetch og:image metadata in the background
+    this.fetchOgImage(url, newObject.id);
+  }
+
+  private animateFitToContent(): void {
+    const targets = this.computeFitToViewTargets();
+    
+    // Set initial view position to center-left before animating
+    // This creates a "zoom in from left" effect
+    const bounds = this.calculateCompositionBounds();
+    if (bounds) {
+      const { centerY: vcy } = this.getVisibleViewportMetrics();
+      const contentCenterY = bounds.y + bounds.height / 2;
+      
+      // Position content centered vertically, but far to the left
+      this.zoom.set(targets.zoom * 0.5); // Start at half the target zoom
+      this.viewportX.set(-bounds.width * targets.zoom); // Position off-screen to the left
+      this.viewportY.set(vcy - contentCenterY * targets.zoom * 0.5); // Center vertically at starting zoom
+    }
+    
+    this.animateToView(targets.zoom, targets.viewportX, targets.viewportY, 450);
+  }
+
+  private animateToView(targetZoom: number, targetViewportX: number, targetViewportY: number, durationMs = 450): void {
+    const startZoom = this.zoom();
+    const startX = this.viewportX();
+    const startY = this.viewportY();
+    const startTime = performance.now();
+
+    if (this.viewAnimationFrame !== null) {
+      cancelAnimationFrame(this.viewAnimationFrame);
+      this.viewAnimationFrame = null;
+    }
+
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const step = () => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(1, elapsed / durationMs);
+      const eased = easeOutCubic(progress);
+
+      this.zoom.set(startZoom + (targetZoom - startZoom) * eased);
+      this.viewportX.set(startX + (targetViewportX - startX) * eased);
+      this.viewportY.set(startY + (targetViewportY - startY) * eased);
+
+      if (progress < 1) {
+        this.viewAnimationFrame = requestAnimationFrame(step);
+      } else {
+        this.viewAnimationFrame = null;
+      }
+    };
+
+    this.viewAnimationFrame = requestAnimationFrame(step);
+  }
+
+  protected returnToUrlWrapper(): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    
+    // Send message to parent window to close canvas
+    if (window.parent !== window) {
+      window.parent.postMessage({
+        type: 'closeCanvas'
+      }, '*');
+    } else {
+      // Fallback if not in iframe - navigate back
+      const originalUrl = this.urlWrapperUrl();
+      if (originalUrl) {
+        window.location.href = `/?url=${encodeURIComponent(originalUrl)}`;
+      } else {
+        window.location.href = '/';
+      }
     }
   }
 
@@ -576,12 +742,22 @@ export class Canvas {
                 ogImage,
                 width: newWidth,
                 height: newHeight,
-                originalAspectRatio: aspectRatio
+                originalAspectRatio: aspectRatio,
+                // Ensure the preview mode is image before centering
+                displayMode: 'image'
               }
             : obj
         )
       );
       this.scheduleHashUpdate();
+      // After image dimensions are known, mark that we need to fit once the image loads in DOM
+      // Cancel any pending fallback to avoid double-fitting
+      if (this.pendingInitialFitTimeout !== null) {
+        window.clearTimeout(this.pendingInitialFitTimeout);
+        this.pendingInitialFitTimeout = null;
+      }
+      // Set flag to trigger fit when the actual img element loads
+      this.pendingFitAfterImageLoad = true;
     };
     img.onerror = () => {
       // If image fails to load, just set the og:image without resizing
@@ -876,44 +1052,44 @@ export class Canvas {
     this.gridScale.set(bestScale);
   }
 
-  protected fitToView(): void {
+  private computeFitToViewTargets(): { zoom: number; viewportX: number; viewportY: number } {
     const objs = this.objects();
     if (objs.length === 0) {
-      // No objects, just reset to default
-      this.zoom.set(1);
-      this.viewportX.set(0);
-      this.viewportY.set(0);
-      return;
+      return { zoom: 1, viewportX: 0, viewportY: 0 };
     }
 
-    // Calculate bounding box of all objects
     const bounds = this.calculateCompositionBounds();
     if (!bounds) {
-      this.zoom.set(1);
-      this.viewportX.set(0);
-      this.viewportY.set(0);
-      return;
+      return { zoom: 1, viewportX: 0, viewportY: 0 };
     }
 
-    // Add padding around objects
-    const padding = 100;
-    const availableWidth = window.innerWidth - 2 * padding;
-    const availableHeight = window.innerHeight - 2 * padding;
+    // Use smaller padding on mobile for better space utilization
+    const isMobileDevice = this.isMobile();
+    const padding = isMobileDevice ? 20 : 40;
+    const { width: vw, height: vh, centerX: vcx, centerY: vcy } = this.getVisibleViewportMetrics();
+    const availableWidth = Math.max(0, vw - 2 * padding);
+    const availableHeight = Math.max(0, vh - 2 * padding);
 
-    // Calculate zoom to fit
     const zoomX = availableWidth / bounds.width;
     const zoomY = availableHeight / bounds.height;
     const newZoom = Math.min(zoomX, zoomY, this.maxZoom);
 
-    // Center the composition
     const centerX = bounds.x + bounds.width / 2;
     const centerY = bounds.y + bounds.height / 2;
-    const viewportCenterX = window.innerWidth / 2;
-    const viewportCenterY = window.innerHeight / 2;
+    const viewportCenterX = vcx;
+    const viewportCenterY = vcy;
 
-    this.zoom.set(newZoom);
-    this.viewportX.set(viewportCenterX - centerX * newZoom);
-    this.viewportY.set(viewportCenterY - centerY * newZoom);
+    const viewportX = viewportCenterX - centerX * newZoom;
+    const viewportY = viewportCenterY - centerY * newZoom;
+
+    return { zoom: newZoom, viewportX, viewportY };
+  }
+
+  protected fitToView(): void {
+    const { zoom, viewportX, viewportY } = this.computeFitToViewTargets();
+    this.zoom.set(zoom);
+    this.viewportX.set(viewportX);
+    this.viewportY.set(viewportY);
   }
 
   private onWheel(event: WheelEvent): void {
@@ -1474,6 +1650,15 @@ export class Canvas {
 
   // Attempt to hide scrollbars inside same-origin iframes by injecting CSS
   // When iframe is interactive, scrolling will be enabled
+  protected onOgImageLoad(event: Event, objectId: string): void {
+    // Called when the og:image in the DOM has fully loaded
+    if (this.pendingFitAfterImageLoad) {
+      this.pendingFitAfterImageLoad = false;
+      // Image is already loaded and rendered, trigger fit directly
+      this.animateFitToContent();
+    }
+  }
+
   protected onIframeLoad(event: Event, objectId: string): void {
     const iframe = event.target as HTMLIFrameElement | null;
     if (!iframe) return;

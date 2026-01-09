@@ -25,7 +25,7 @@
         } @else if (obj.type === 'iframe') {
           @if (obj.displayMode === 'image' && obj.ogImage) {
             <!-- Show og:image preview when in image mode -->
-            <img [src]="obj.ogImage" alt="URL preview" class="object-content" />
+            <img [src]="obj.ogImage" alt="URL preview" class="object-content" (load)="onOgImageLoad($event, obj.id)" />
           } @else {
             <!-- Show iframe with interaction overlay when in iframe mode -->
             <div 
@@ -158,6 +158,17 @@
       </div>
     }
   </div>
+  
+  <!-- Close button to return to URL wrapper (only shown when came from URL wrapper) -->
+  @if (cameFromUrlWrapper()) {
+    <div class="close-button-container">
+      <button class="close-button" (click)="returnToUrlWrapper()" title="Return to URL wrapper">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M15 10l-1.5-1.5L9 13V3H7v10L2.5 8.5 1 10l6 6z"/>
+        </svg>
+      </button>
+    </div>
+  }
   
   <div class="zoom-controls">
     <div class="zoom-counter">{{ zoomPercentage() }}%</div>
