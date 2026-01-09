@@ -137,6 +137,7 @@ export class Canvas {
   private panStartViewportY = 0;
   private rotateStartAngle = 0;
   private rotateStartRotation = 0;
+  private viewAnimationFrame: number | null = null;
   
   protected readonly transformHandles: TransformHandle[] = [
     { type: 'scale-nw', cursor: 'nw-resize' },
@@ -235,6 +236,7 @@ export class Canvas {
               sessionStorage.removeItem(loadUrlKey);
               // Add the URL as an object on the canvas
               this.addUrlObject(urlToLoad);
+              this.animateFitToContent();
               // Clean up the query parameter from the URL
               urlParams.delete('loadUrl');
               const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
@@ -279,6 +281,63 @@ export class Canvas {
 
     // Fetch og:image metadata in the background
     this.fetchOgImage(url, newObject.id);
+  }
+
+  private animateFitToContent(): void {
+    const bounds = this.calculateCompositionBounds();
+    if (!bounds) {
+      return;
+    }
+
+    const padding = 100;
+    const availableWidth = window.innerWidth - 2 * padding;
+    const availableHeight = window.innerHeight - 2 * padding;
+
+    const zoomX = availableWidth / bounds.width;
+    const zoomY = availableHeight / bounds.height;
+    const targetZoom = Math.min(Math.max(this.minZoom, Math.min(zoomX, zoomY, this.maxZoom)), this.maxZoom);
+
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
+    const viewportCenterX = window.innerWidth / 2;
+    const viewportCenterY = window.innerHeight / 2;
+
+    const targetViewportX = viewportCenterX - centerX * targetZoom;
+    const targetViewportY = viewportCenterY - centerY * targetZoom;
+
+    this.animateToView(targetZoom, targetViewportX, targetViewportY, 450);
+  }
+
+  private animateToView(targetZoom: number, targetViewportX: number, targetViewportY: number, durationMs = 450): void {
+    const startZoom = this.zoom();
+    const startX = this.viewportX();
+    const startY = this.viewportY();
+    const startTime = performance.now();
+
+    if (this.viewAnimationFrame !== null) {
+      cancelAnimationFrame(this.viewAnimationFrame);
+      this.viewAnimationFrame = null;
+    }
+
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const step = () => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(1, elapsed / durationMs);
+      const eased = easeOutCubic(progress);
+
+      this.zoom.set(startZoom + (targetZoom - startZoom) * eased);
+      this.viewportX.set(startX + (targetViewportX - startX) * eased);
+      this.viewportY.set(startY + (targetViewportY - startY) * eased);
+
+      if (progress < 1) {
+        this.viewAnimationFrame = requestAnimationFrame(step);
+      } else {
+        this.viewAnimationFrame = null;
+      }
+    };
+
+    this.viewAnimationFrame = requestAnimationFrame(step);
   }
 
   protected returnToUrlWrapper(): void {

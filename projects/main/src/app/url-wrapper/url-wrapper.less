@@ -70,12 +70,13 @@
   height: 100vh;
   z-index: 10;
   background: rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 
   &.slide-in-left {
-    animation: slideFromLeft 220ms ease-out;
+    animation: slideFromLeft 360ms ease-in-out;
   }
   &.slide-out-left {
-    animation: slideToLeft 220ms ease-in;
+    animation: slideToLeft 360ms ease-in-out;
   }
 }
 
@@ -91,18 +92,18 @@
 
 @keyframes slideFromLeft {
   from {
-    transform: translateX(-100%);
+    clip-path: inset(0 100% 0 0);
   }
   to {
-    transform: translateX(0);
+    clip-path: inset(0 0 0 0);
   }
 }
 
 @keyframes slideToLeft {
   from {
-    transform: translateX(0);
+    clip-path: inset(0 0 0 0);
   }
   to {
-    transform: translateX(-100%);
+    clip-path: inset(0 100% 0 0);
   }
 }
