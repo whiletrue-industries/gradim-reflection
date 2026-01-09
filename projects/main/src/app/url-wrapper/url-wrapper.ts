@@ -1,7 +1,8 @@
-import { Component, signal, computed, ChangeDetectionStrategy, inject } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ChangeDetectionStrategy, Component, OnDestroy, inject, signal } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { CommonModule } from '@angular/common';
+import { PLATFORM_ID } from '@angular/core';
+import { getRandomGradimUrl } from '../gradim-urls';
 
 @Component({
   selector: 'app-url-wrapper',
@@ -10,45 +11,60 @@ import { CommonModule } from '@angular/common';
   styleUrl: './url-wrapper.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class UrlWrapper {
-  private route = inject(ActivatedRoute);
-  private router = inject(Router);
+export class UrlWrapper implements OnDestroy {
   private sanitizer = inject(DomSanitizer);
+  private platformId = inject(PLATFORM_ID);
 
-  protected url = signal<string>('');
-  protected safeUrl = computed<SafeResourceUrl | null>(() => {
-    const urlValue = this.url();
-    return urlValue ? this.sanitizer.bypassSecurityTrustResourceUrl(urlValue) : null;
-  });
+  protected currentUrl = signal<string>('');
+  protected safeContextUrl = signal<SafeResourceUrl | null>(null);
+  protected canvasVisible = signal(false);
+  protected safeCanvasUrl = signal<SafeResourceUrl | null>(null);
 
   constructor() {
-    // Get URL from query parameter
-    this.route.queryParams.subscribe(params => {
-      const url = params['url'] || 'https://gradim-wall.netlify.app/';
-      this.url.set(url);
-    });
+    const randomUrl = getRandomGradimUrl();
+    this.currentUrl.set(randomUrl);
+    this.safeContextUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(randomUrl));
+
+    if (isPlatformBrowser(this.platformId)) {
+      window.addEventListener('message', this.handleMessage);
+    }
   }
 
-  protected onShare(): void {
-    const currentUrl = this.url();
-    if (!currentUrl) return;
+  ngOnDestroy(): void {
+    if (isPlatformBrowser(this.platformId)) {
+      window.removeEventListener('message', this.handleMessage);
+    }
+  }
 
-    // Store the URL in sessionStorage with a unique key
-    // Using crypto.randomUUID() for better uniqueness guarantees
+  private handleMessage = (event: MessageEvent): void => {
+    if (event.data?.type === 'closeCanvas') {
+      this.closeCanvas();
+    }
+  };
+
+  protected shareToCanvas(): void {
+    const url = this.currentUrl();
+    if (!url) {
+      return;
+    }
+
     const urlKey = `pending-canvas-url-${crypto.randomUUID()}`;
     try {
-      sessionStorage.setItem(urlKey, currentUrl);
-      console.log('[URL Wrapper] Stored URL with key:', urlKey, 'URL:', currentUrl);
+      sessionStorage.setItem(urlKey, url);
     } catch (error) {
       console.error('Failed to store URL in sessionStorage:', error);
       return;
     }
 
-    // Navigate to sample-reflect with the URL key as a query parameter
-    // The canvas will read the URL from sessionStorage
-    console.log('[URL Wrapper] Navigating to /sample-reflect with loadUrl:', urlKey);
-    this.router.navigate(['/sample-reflect'], {
-      queryParams: { loadUrl: urlKey }
-    });
+    const canvasUrl = `/sample-reflect?loadUrl=${urlKey}`;
+    this.safeCanvasUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(canvasUrl));
+    this.canvasVisible.set(true);
+  }
+
+  protected closeCanvas(): void {
+    this.canvasVisible.set(false);
+    setTimeout(() => {
+      this.safeCanvasUrl.set(null);
+    }, 300);
   }
 }
