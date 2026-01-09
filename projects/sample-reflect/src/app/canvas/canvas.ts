@@ -138,6 +138,19 @@ export class Canvas {
   private rotateStartAngle = 0;
   private rotateStartRotation = 0;
   private viewAnimationFrame: number | null = null;
+  // UI chrome safe areas (px) to improve visual centering
+  private readonly safeInsetTop = 20;
+  private readonly safeInsetBottom = 100;
+  private readonly safeInsetLeft = 20;
+  private readonly safeInsetRight = 20;
+
+  private getVisibleViewportMetrics() {
+    const width = Math.max(0, window.innerWidth - this.safeInsetLeft - this.safeInsetRight);
+    const height = Math.max(0, window.innerHeight - this.safeInsetTop - this.safeInsetBottom);
+    const centerX = this.safeInsetLeft + width / 2;
+    const centerY = this.safeInsetTop + height / 2;
+    return { width, height, centerX, centerY };
+  }
   
   protected readonly transformHandles: TransformHandle[] = [
     { type: 'scale-nw', cursor: 'nw-resize' },
@@ -290,8 +303,9 @@ export class Canvas {
     }
 
     const padding = 100;
-    const availableWidth = window.innerWidth - 2 * padding;
-    const availableHeight = window.innerHeight - 2 * padding;
+    const { width: vw, height: vh, centerX: vcx, centerY: vcy } = this.getVisibleViewportMetrics();
+    const availableWidth = Math.max(0, vw - 2 * padding);
+    const availableHeight = Math.max(0, vh - 2 * padding);
 
     const zoomX = availableWidth / bounds.width;
     const zoomY = availableHeight / bounds.height;
@@ -299,8 +313,8 @@ export class Canvas {
 
     const centerX = bounds.x + bounds.width / 2;
     const centerY = bounds.y + bounds.height / 2;
-    const viewportCenterX = window.innerWidth / 2;
-    const viewportCenterY = window.innerHeight / 2;
+    const viewportCenterX = vcx;
+    const viewportCenterY = vcy;
 
     const targetViewportX = viewportCenterX - centerX * targetZoom;
     const targetViewportY = viewportCenterY - centerY * targetZoom;
@@ -729,6 +743,10 @@ export class Canvas {
         )
       );
       this.scheduleHashUpdate();
+      // After image dimensions are known, refit view to center all content
+      if (this.cameFromUrlWrapper()) {
+        afterNextRender(() => this.animateFitToContent());
+      }
     };
     img.onerror = () => {
       // If image fails to load, just set the og:image without resizing
@@ -1044,8 +1062,9 @@ export class Canvas {
 
     // Add padding around objects
     const padding = 100;
-    const availableWidth = window.innerWidth - 2 * padding;
-    const availableHeight = window.innerHeight - 2 * padding;
+    const { width: vw, height: vh, centerX: vcx, centerY: vcy } = this.getVisibleViewportMetrics();
+    const availableWidth = Math.max(0, vw - 2 * padding);
+    const availableHeight = Math.max(0, vh - 2 * padding);
 
     // Calculate zoom to fit
     const zoomX = availableWidth / bounds.width;
@@ -1055,8 +1074,8 @@ export class Canvas {
     // Center the composition
     const centerX = bounds.x + bounds.width / 2;
     const centerY = bounds.y + bounds.height / 2;
-    const viewportCenterX = window.innerWidth / 2;
-    const viewportCenterY = window.innerHeight / 2;
+    const viewportCenterX = vcx;
+    const viewportCenterY = vcy;
 
     this.zoom.set(newZoom);
     this.viewportX.set(viewportCenterX - centerX * newZoom);
