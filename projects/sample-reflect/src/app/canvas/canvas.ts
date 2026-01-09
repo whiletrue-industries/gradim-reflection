@@ -37,23 +37,34 @@ export class Canvas {
   private readonly baseSize = 200;
   private readonly dataTokenPrefix = 'data-token-';
   private readonly dataFilePrefix = 'file-data-';
+  private readonly minZoom = 0.1;
+  private readonly maxZoom = 5;
   private hashUpdateHandle: number | null = null;
-  private readonly hashThrottleMs = 80;
+  private readonly hashThrottleMs = 300; // Increased from 80ms for more robust handling
   private lastSerializedHash = '';
   private suppressHash = false; // suppress hash writes during interactions
   private hashDirty = false;    // track pending changes while suppressed
+  private skipNextHashWrite = false; // allow a deliberate empty-hash clear without rewriting it
   private wheelFlushHandle: number | null = null; // debounce wheel flush
   private ephemeralTokens = new Map<string, string>(); // in-memory fallback for tokens
-  
-  // Default dimensions for new URL objects
-  private readonly defaultIframeWidth = 600;
-  private readonly defaultIframeHeight = 400;
-  private readonly defaultViewportWidth = 1920;
-  private readonly defaultViewportHeight = 1080;
-  
   // 1x1 transparent PNG to keep image objects alive when content can't resolve yet
   private readonly transparentPixel =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/hsrLxkAAAAASUVORK5CYII=';
+  
+  // Touch interaction state
+  private touchStartDistance = 0;
+  private touchStartZoom = 1;
+  private isTouchPinching = false;
+  private activeTouches = 0;
+  
+  // Mobile detection
+  protected isMobile = signal(false);
+  protected instructionsText = computed(() => {
+    if (this.isMobile()) {
+      return 'Tap to select • Pinch to zoom • Two fingers to pan';
+    }
+    return 'Drag & drop images • Paste URLs (Ctrl/Cmd+V) • Scroll to zoom';
+  });
   
   protected objects = signal<CanvasObject[]>([]);
   protected selectedObjectId = signal<string | null>(null);
@@ -65,6 +76,13 @@ export class Canvas {
   protected viewportX = signal(0);
   protected viewportY = signal(0);
   protected zoom = signal(1);
+  // Share menu (mobile)
+  protected shareMenuOpen = signal(false);
+  // Add menu (mobile)
+  protected addMenuOpen = signal(false);
+  // URL input modal
+  protected showUrlModal = signal(false);
+  protected urlInputValue = signal('');
   
   // Iframe interaction state
   protected hoveredIframeId = signal<string | null>(null);
@@ -128,6 +146,11 @@ export class Canvas {
       window.addEventListener('hashchange', this.onHashChange);
       window.addEventListener('keydown', (e) => this.onKeyDown(e));
       
+      // Detect mobile device after render
+      afterNextRender(() => {
+        this.isMobile.set(this.detectMobile());
+      });
+      
       // Set up effects first, before restoring state
       effect(() => {
         // Track canvas view and objects; schedule hash sync when they change.
@@ -150,114 +173,87 @@ export class Canvas {
       let hashToRestore = '';
       
       try {
+        const currentUrlHash = window.location.hash;
         const storedHash = sessionStorage.getItem('canvasLastHash');
-        console.log('[Canvas] Constructor - storedHash:', storedHash);
-        if (storedHash) {
+        
+        // If URL hash is explicitly empty but sessionStorage has a value,
+        // the user deliberately cleared it → respect that by clearing storage and skipping restore
+        if ((!currentUrlHash || currentUrlHash === '#') && storedHash) {
+          sessionStorage.removeItem('canvasLastHash');
+          this.skipNextHashWrite = true;
+          hashToRestore = ''; // Don't restore anything
+        } else if (storedHash) {
           // Use the properly encoded version from sessionStorage
           hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
-          console.log('[Canvas] Constructor - using hash from sessionStorage:', hashToRestore);
-        } else {
-          // Fallback to window.location.hash if no stored hash (first visit)
-          hashToRestore = window.location.hash;
-          console.log('[Canvas] Constructor - using hash from window.location:', hashToRestore);
-        }
-        
-        // Update window.location to use the properly encoded version
-        if (hashToRestore && hashToRestore !== window.location.hash) {
-          // Preserve the path and query parameters when updating the hash
-          const newUrl = window.location.pathname + window.location.search + hashToRestore;
-          window.history.replaceState(null, '', newUrl);
+          
+          // Update window.location to use the properly encoded version
+          if (hashToRestore !== currentUrlHash) {
+            window.history.replaceState(null, '', hashToRestore);
+          }
+        } else if (currentUrlHash) {
+          // No stored hash, but URL has one → use it
+          hashToRestore = currentUrlHash;
         }
       } catch (e) {
-        console.error('[Canvas] Constructor - error accessing sessionStorage:', e);
         hashToRestore = window.location.hash;
       }
       
       // Suppress hash writes during initial state restoration
       this.suppressHash = true;
-      console.log('[Canvas] Constructor - applying hash state:', hashToRestore);
-      this.applyHashState(hashToRestore);
+      if (hashToRestore) {
+        this.applyHashState(hashToRestore);
+      }
       this.suppressHash = false;
       
-      // Additional safeguard: restore hash after Angular hydration completes
+      // Clean up orphaned localStorage entries after initial load
       afterNextRender(() => {
-        console.log('[Canvas] afterNextRender - window.location.hash:', window.location.hash);
-        try {
-          const storedHash = sessionStorage.getItem('canvasLastHash');
-          console.log('[Canvas] afterNextRender - storedHash:', storedHash);
-          if (storedHash && !window.location.hash) {
-            const hashValue = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
-            console.log('[Canvas] afterNextRender - restoring hash:', hashValue);
-            // Preserve the path and query parameters when updating the hash
-            const newUrl = window.location.pathname + window.location.search + hashValue;
-            window.history.replaceState(null, '', newUrl);
-            this.suppressHash = true;
-            this.applyHashState(hashValue);
-            this.suppressHash = false;
-          }
-          
-          // Check for loadUrl query parameter (from URL wrapper)
-          const urlParams = new URLSearchParams(window.location.search);
-          const loadUrlKey = urlParams.get('loadUrl');
-          if (loadUrlKey) {
-            const urlToLoad = sessionStorage.getItem(loadUrlKey);
-            if (urlToLoad) {
-              console.log('[Canvas] Loading URL from query parameter:', urlToLoad);
-              // Clean up the stored URL
-              sessionStorage.removeItem(loadUrlKey);
-              // Add the URL as an object on the canvas
-              this.addUrlObject(urlToLoad);
-              // Clean up the query parameter from the URL
-              urlParams.delete('loadUrl');
-              const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
-              window.history.replaceState(null, '', newUrl);
-            }
-          }
-        } catch (e) {
-          console.error('[Canvas] afterNextRender - error:', e);
-        }
+        this.cleanupOrphanedStorage();
       });
     }
   }
 
-  private addUrlObject(url: string): void {
-    // Add URL as an iframe object centered on the canvas
-    const centerX = this.defaultViewportWidth / 2 - this.defaultIframeWidth / 2;
-    const centerY = this.defaultViewportHeight / 2 - this.defaultIframeHeight / 2;
-    // Guard against division by zero
-    const aspectRatio = this.defaultIframeWidth > 0 
-      ? this.defaultIframeHeight / this.defaultIframeWidth 
-      : 1;
-    
-    // Use current zoom or default to 1 if invalid
-    const currentZoom = this.zoom() || 1;
-    
-    const newObject: CanvasObject = {
-      id: this.generateId(),
-      type: 'iframe',
-      x: centerX / currentZoom,
-      y: centerY / currentZoom,
-      width: this.defaultIframeWidth,
-      height: this.defaultIframeHeight,
-      rotation: 0,
-      content: url,
-      sourceRef: url,
-      originalAspectRatio: aspectRatio,
-      safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
-      displayMode: 'image', // Default to image view (og:image preview)
-    };
-    
-    this.addObject(newObject);
-    
-    // Fetch og:image metadata in the background
-    this.fetchOgImage(url, newObject.id);
-  }
-
   private onHashChange = (): void => {
     if (!isPlatformBrowser(this.platformId)) return;
-    if (window.location.hash === this.lastSerializedHash) return;
-    this.applyHashState(window.location.hash);
-    this.lastSerializedHash = window.location.hash;
+    const currentHash = window.location.hash || '';
+
+    // If the user manually cleared the hash, clear state and skip the next write
+    if (!currentHash || currentHash === '#') {
+      try {
+        sessionStorage.removeItem('canvasLastHash');
+      } catch {}
+      this.lastSerializedHash = '';
+      this.suppressHash = true;
+      this.objects.set([]);
+      this.selectedObjectId.set(null);
+      this.viewportX.set(0);
+      this.viewportY.set(0);
+      this.zoom.set(1);
+      this.suppressHash = false;
+      this.hashDirty = false;
+      this.skipNextHashWrite = true;
+      return;
+    }
+
+    // CRITICAL: Only apply external hash changes, not our own writes
+    // Check both lastSerializedHash (what we scheduled to write) and actual current signals
+    const currentSerialized = this.serializeStateToHash();
+    const currentPrefixed = currentSerialized ? `#${currentSerialized}` : '';
+    
+    // If current hash matches what we just serialized, this is our own write - ignore it
+    if (currentHash === currentPrefixed || currentHash === this.lastSerializedHash) {
+      return;
+    }
+    
+    // SAFETY: Never apply a shorter hash if we have a longer one and current state has objects
+    // This prevents data loss during rapid zoom when hash writes race
+    if (this.objects().length > 0 && currentHash.length < this.lastSerializedHash.length) {
+      // Keep our current state and update lastSerializedHash to prevent repeated attempts
+      this.lastSerializedHash = currentPrefixed;
+      return;
+    }
+    
+    this.applyHashState(currentHash);
+    this.lastSerializedHash = currentHash;
   };
 
   private setupEventListeners(): void {
@@ -269,6 +265,34 @@ export class Canvas {
     
     // Wheel event for zooming
     window.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+    
+    // Touch events for mobile
+    window.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+    window.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+    window.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+    
+    // Update mobile detection on resize
+    window.addEventListener('resize', () => {
+      this.isMobile.set(this.detectMobile());
+    });
+  }
+  
+  private detectMobile(): boolean {
+    if (!isPlatformBrowser(this.platformId)) return false;
+    
+    // Primary check: screen width (most reliable for responsive design)
+    const isSmallScreen = window.innerWidth <= 768;
+    
+    // Check for touch support
+    const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    // Check user agent for mobile devices
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+    
+    // Consider it mobile if screen is small (primary condition for responsive design)
+    // OR if it's a mobile device with touch support
+    return isSmallScreen || (hasTouchScreen && isMobileUA);
   }
 
   protected onDrop(event: DragEvent): void {
@@ -333,6 +357,17 @@ export class Canvas {
   }
 
   private onPaste(event: ClipboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    const active = document.activeElement as HTMLElement | null;
+    const isFormField = (el: HTMLElement | null) => !!el && (
+      el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.closest('.url-input') !== null
+    );
+
+    // If focus is on an input/textarea/contentEditable (e.g., URL modal), do not intercept paste
+    if (isFormField(target) || isFormField(active)) {
+      return;
+    }
+
     const text = event.clipboardData?.getData('text');
     if (text && this.isValidUrl(text)) {
       // Add iframe at center of viewport
@@ -361,6 +396,60 @@ export class Canvas {
     }
   }
 
+  // File picker (mobile upload)
+  protected onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files && input.files[0];
+    if (!file || !file.type.startsWith('image/')) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = reader.result as string;
+      const sourceRef = this.deriveSourceRef(content, file.name);
+
+      const img = new Image();
+      img.onload = () => {
+        const aspectRatio = img.naturalHeight / img.naturalWidth || 1;
+        // place at current viewport center
+        const centerX = (window.innerWidth / 2 - this.viewportX()) / this.zoom();
+        const centerY = (window.innerHeight / 2 - this.viewportY()) / this.zoom();
+        this.addObject({
+          id: this.generateId(),
+          type: 'image',
+          x: centerX - this.baseSize / 2,
+          y: centerY - (this.baseSize * aspectRatio) / 2,
+          width: this.baseSize,
+          height: this.baseSize * aspectRatio,
+          rotation: 0,
+          content,
+          sourceRef,
+          originalAspectRatio: aspectRatio,
+        });
+      };
+      img.onerror = () => {
+        const centerX = (window.innerWidth / 2 - this.viewportX()) / this.zoom();
+        const centerY = (window.innerHeight / 2 - this.viewportY()) / this.zoom();
+        this.addObject({
+          id: this.generateId(),
+          type: 'image',
+          x: centerX - this.baseSize / 2,
+          y: centerY - this.baseSize / 2,
+          width: this.baseSize,
+          height: this.baseSize,
+          rotation: 0,
+          content,
+          sourceRef,
+          originalAspectRatio: 1,
+        });
+      };
+      img.src = content;
+    };
+    reader.readAsDataURL(file);
+    // reset input value so same file can be picked again if desired
+    input.value = '';
+  }
+
   private isValidUrl(string: string): boolean {
     try {
       new URL(string);
@@ -372,6 +461,20 @@ export class Canvas {
 
   private async fetchOgImage(url: string, objectId: string): Promise<void> {
     if (!isPlatformBrowser(this.platformId)) return;
+    const host = window.location.hostname.toLowerCase();
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+
+    // Gradim Wall: derive og:image directly, skip API entirely
+    const gradimOg = this.getGradimWallOgImage(url);
+    if (gradimOg) {
+      this.updateObjectOgImage(objectId, gradimOg);
+      return;
+    }
+
+    if (!isLocalHost) {
+      this.trySetDevelopmentOgImage(url, objectId);
+      return;
+    }
     
     let ogImageFetched = false;
     
@@ -379,35 +482,24 @@ export class Canvas {
     // and generates noisy console errors that confuse users
     try {
       const apiUrl = `/api/url-metadata?url=${encodeURIComponent(url)}`;
-      console.log('[Canvas] fetchOgImage: calling', apiUrl);
       const response = await fetch(apiUrl);
-      console.log('[Canvas] fetchOgImage: response status', response.status, response.statusText);
       
       // Check if we got a valid JSON response (not HTML 404)
       const contentType = response.headers.get('content-type');
-      console.log('[Canvas] fetchOgImage: content-type', contentType);
       
       if (response.ok && contentType?.includes('application/json')) {
         const data = await response.json();
-        console.log('[Canvas] fetchOgImage: received data:', data);
         if (data.ogImage) {
-          console.log('[Canvas] fetchOgImage: setting og:image:', data.ogImage);
           this.updateObjectOgImage(objectId, data.ogImage);
           ogImageFetched = true;
-        } else {
-          console.log('[Canvas] fetchOgImage: no ogImage in response');
         }
-      } else {
-        console.log('[Canvas] fetchOgImage: not OK or not JSON, falling back to dev mode');
       }
     } catch (error) {
       // API endpoint not available (dev mode) or failed
-      console.log('[Canvas] fetchOgImage: fetch failed, will try fallback:', error);
     }
     
     // If og:image wasn't fetched from API, try development fallback
     if (!ogImageFetched) {
-      console.log('[Canvas] fetchOgImage: no og:image from API, trying dev fallback');
       this.trySetDevelopmentOgImage(url, objectId);
     }
   }
@@ -429,31 +521,35 @@ export class Canvas {
         'www.youtube.com': 'https://www.youtube.com/img/desktop/yt_1200.png',
       };
 
-      let ogImage = devOgImages[hostname];
+      let ogImage: string | undefined = devOgImages[hostname];
 
       // Gradim Wall heuristic (mirrors server-side extraction)
       if (!ogImage && hostname === 'gradim-wall.netlify.app') {
-        const segments = urlObj.pathname.split('/').filter(Boolean);
-        const id = decodeURIComponent(segments[segments.length - 1] || '');
-        if (id && /^[A-Za-z0-9_\-]+$/.test(id)) {
-          ogImage = `https://gradim.fh-potsdam.de/omeka-s/files/large/${id}.jpg`;
-        }
+        ogImage = this.getGradimWallOgImage(urlObj.toString()) || undefined;
       }
 
       if (ogImage) {
-        console.log('[Canvas] trySetDevelopmentOgImage: using hardcoded/heuristic og:image for', hostname, ':', ogImage);
         // Set after a short delay to simulate API fetch
         setTimeout(() => {
           this.updateObjectOgImage(objectId, ogImage as string);
         }, 500);
-      } else {
-        console.log('[Canvas] trySetDevelopmentOgImage: no hardcoded og:image for', hostname, 
-          '- API endpoint (/api/url-metadata) is required to fetch og:image for arbitrary URLs');
       }
     } catch (error) {
       // Invalid URL or other error - silently ignore
-      console.error('[Canvas] trySetDevelopmentOgImage: error:', error);
     }
+  }
+
+  private getGradimWallOgImage(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.hostname.toLowerCase() !== 'gradim-wall.netlify.app') return null;
+      const segments = urlObj.pathname.split('/').filter(Boolean);
+      const id = decodeURIComponent(segments[segments.length - 1] || '');
+      if (id && /^[A-Za-z0-9_\-]+$/.test(id)) {
+        return `https://gradim.fh-potsdam.de/omeka-s/files/large/${id}.jpg`;
+      }
+    } catch {}
+    return null;
   }
 
   private extractOgImage(html: string): string | null {
@@ -559,15 +655,14 @@ export class Canvas {
     event.preventDefault();
     
     // Find and clean up the object from localStorage before deleting
-      this.suppressHash = true; // Suppress hash during object drag
     const objectToDelete = this.objects().find(o => o.id === selectedId);
     if (objectToDelete) {
       this.cleanupObjectStorage(objectToDelete);
     }
     
+    // Update objects signal - this will trigger effect and scheduleHashUpdate
     this.objects.update(objects => objects.filter(o => o.id !== selectedId));
     this.selectedObjectId.set(null);
-    this.scheduleHashUpdate();
   }
 
   protected onObjectClick(event: MouseEvent, objectId: string): void {
@@ -637,6 +732,61 @@ export class Canvas {
 
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
+    }
+  }
+  
+  protected onCanvasTouchStart(event: TouchEvent): void {
+    // Only handle two-finger pan on canvas background
+    if (event.touches.length === 2) {
+      const target = event.target as HTMLElement;
+      const isBackgroundTouch = target === event.currentTarget || 
+                                 (target?.classList && (target.classList.contains('dot-grid') ||
+                                  target.classList.contains('canvas-objects')));
+      
+      if (isBackgroundTouch) {
+        event.preventDefault();
+        this.suppressHash = true;
+        this.selectedObjectId.set(null);
+        this.isPanningCanvas = true;
+        
+        const touch1 = event.touches[0];
+        const touch2 = event.touches[1];
+        const midX = (touch1.clientX + touch2.clientX) / 2;
+        const midY = (touch1.clientY + touch2.clientY) / 2;
+        
+        this.dragStartX = midX;
+        this.dragStartY = midY;
+        this.panStartViewportX = this.viewportX();
+        this.panStartViewportY = this.viewportY();
+
+        const onTouchMove = (e: TouchEvent) => {
+          if (!this.isPanningCanvas || e.touches.length !== 2) return;
+          
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          const currentMidX = (t1.clientX + t2.clientX) / 2;
+          const currentMidY = (t1.clientY + t2.clientY) / 2;
+          
+          const dx = currentMidX - this.dragStartX;
+          const dy = currentMidY - this.dragStartY;
+          
+          this.viewportX.set(this.panStartViewportX + dx);
+          this.viewportY.set(this.panStartViewportY + dy);
+        };
+
+        const onTouchEnd = () => {
+          this.isPanningCanvas = false;
+          this.suppressHash = false;
+          if (this.hashDirty) {
+            this.scheduleHashUpdate();
+          }
+          window.removeEventListener('touchmove', onTouchMove);
+          window.removeEventListener('touchend', onTouchEnd);
+        };
+
+        window.addEventListener('touchmove', onTouchMove);
+        window.addEventListener('touchend', onTouchEnd);
+      }
     }
   }
 
@@ -726,10 +876,44 @@ export class Canvas {
     this.gridScale.set(bestScale);
   }
 
-  protected resetZoom(): void {
-    this.zoom.set(1);
-    this.viewportX.set(0);
-    this.viewportY.set(0);
+  protected fitToView(): void {
+    const objs = this.objects();
+    if (objs.length === 0) {
+      // No objects, just reset to default
+      this.zoom.set(1);
+      this.viewportX.set(0);
+      this.viewportY.set(0);
+      return;
+    }
+
+    // Calculate bounding box of all objects
+    const bounds = this.calculateCompositionBounds();
+    if (!bounds) {
+      this.zoom.set(1);
+      this.viewportX.set(0);
+      this.viewportY.set(0);
+      return;
+    }
+
+    // Add padding around objects
+    const padding = 100;
+    const availableWidth = window.innerWidth - 2 * padding;
+    const availableHeight = window.innerHeight - 2 * padding;
+
+    // Calculate zoom to fit
+    const zoomX = availableWidth / bounds.width;
+    const zoomY = availableHeight / bounds.height;
+    const newZoom = Math.min(zoomX, zoomY, this.maxZoom);
+
+    // Center the composition
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
+    const viewportCenterX = window.innerWidth / 2;
+    const viewportCenterY = window.innerHeight / 2;
+
+    this.zoom.set(newZoom);
+    this.viewportX.set(viewportCenterX - centerX * newZoom);
+    this.viewportY.set(viewportCenterY - centerY * newZoom);
   }
 
   private onWheel(event: WheelEvent): void {
@@ -739,7 +923,7 @@ export class Canvas {
     
     const delta = event.deltaY;
     const zoomFactor = delta > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.1, Math.min(5, this.zoom() * zoomFactor));
+    const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoom() * zoomFactor));
     
     // Zoom towards mouse position
     const mouseX = event.clientX;
@@ -765,7 +949,154 @@ export class Canvas {
         this.scheduleHashUpdate();
       }
       this.wheelFlushHandle = null;
-    }, 150);
+    }, 300); // Increased from 150ms for more robust handling
+  }
+
+  // Share (mobile)
+  protected async onShareClick(): Promise<void> {
+    try {
+      await this.shareComposition();
+    } catch (error) {
+      console.error('Failed to share composition:', error);
+    }
+  }
+  
+  // Add menu helpers (mobile)
+  protected toggleAddMenu(): void {
+    this.addMenuOpen.update(v => !v);
+    if (this.addMenuOpen()) {
+      this.shareMenuOpen.set(false);
+    }
+  }
+  protected onAddImageClick(): void {
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fileInput?.click();
+    this.addMenuOpen.set(false);
+  }
+  protected onAddUrlClick(): void {
+    this.addMenuOpen.set(false);
+    // Show custom modal instead of prompt
+    this.urlInputValue.set('');
+    this.showUrlModal.set(true);
+    // Focus input after a short delay to ensure modal is rendered
+    setTimeout(() => {
+      const input = document.querySelector('.url-input') as HTMLInputElement;
+      input?.focus();
+    }, 100);
+  }
+  
+  protected submitUrlModal(): void {
+    const url = this.urlInputValue().trim();
+    this.showUrlModal.set(false);
+    
+    if (!url) {
+      return;
+    }
+    this.addIframeFromUrl(url);
+  }
+  
+  protected cancelUrlModal(): void {
+    this.showUrlModal.set(false);
+    this.urlInputValue.set('');
+  }
+
+  private addIframeFromUrl(url: string): void {
+    if (!this.isValidUrl(url)) {
+      console.warn('Invalid URL:', url);
+      return;
+    }
+    const sourceRef = this.deriveSourceRef(url);
+    const gradimOg = this.getGradimWallOgImage(url);
+    const newObject: CanvasObject = {
+      id: this.generateId(),
+      type: 'iframe',
+      x: (window.innerWidth / 2 - this.viewportX()) / this.zoom(),
+      y: (window.innerHeight / 2 - this.viewportY()) / this.zoom(),
+      width: 600,
+      height: 400,
+      rotation: 0,
+      content: url,
+      sourceRef,
+      originalAspectRatio: 400 / 600,
+      safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
+      displayMode: gradimOg ? 'image' : 'image',
+      ogImage: gradimOg ?? undefined,
+    };
+    this.addObject(newObject);
+    // If Gradim Wall, we already set og; skip API
+    if (!gradimOg) {
+      this.fetchOgImage(url, newObject.id);
+    }
+  }
+  
+  // Touch event handlers
+  private onTouchStart(event: TouchEvent): void {
+    this.activeTouches = event.touches.length;
+    
+    if (event.touches.length === 2) {
+      // Two-finger pinch to zoom
+      event.preventDefault();
+      this.isTouchPinching = true;
+      this.suppressHash = true;
+      
+      const touch1 = event.touches[0];
+      const touch2 = event.touches[1];
+      this.touchStartDistance = this.getTouchDistance(touch1, touch2);
+      this.touchStartZoom = this.zoom();
+    } else if (event.touches.length === 1) {
+      // Single touch - could be panning or object interaction
+      // Let the individual handlers deal with it
+    }
+  }
+  
+  private onTouchMove(event: TouchEvent): void {
+    if (event.touches.length === 2 && this.isTouchPinching) {
+      // Pinch to zoom
+      event.preventDefault();
+      
+      const touch1 = event.touches[0];
+      const touch2 = event.touches[1];
+      const currentDistance = this.getTouchDistance(touch1, touch2);
+      
+      if (this.touchStartDistance > 0) {
+        const scale = currentDistance / this.touchStartDistance;
+        const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.touchStartZoom * scale));
+        
+        // Zoom towards midpoint between fingers
+        const midX = (touch1.clientX + touch2.clientX) / 2;
+        const midY = (touch1.clientY + touch2.clientY) / 2;
+        
+        const canvasX = (midX - this.viewportX()) / this.zoom();
+        const canvasY = (midY - this.viewportY()) / this.zoom();
+        
+        this.zoom.set(newZoom);
+        this.viewportX.set(midX - canvasX * newZoom);
+        this.viewportY.set(midY - canvasY * newZoom);
+      }
+    }
+  }
+  
+  private onTouchEnd(event: TouchEvent): void {
+    this.activeTouches = event.touches.length;
+    
+    if (event.touches.length < 2) {
+      this.isTouchPinching = false;
+      this.touchStartDistance = 0;
+      
+      if (event.touches.length === 0) {
+        // All touches ended
+        this.suppressHash = false;
+        if (this.hashDirty) {
+          this.scheduleHashUpdate();
+        }
+      }
+    }
+  }
+  
+  private getTouchDistance(touch1: Touch, touch2: Touch): number {
+    const dx = touch2.clientX - touch1.clientX;
+    const dy = touch2.clientY - touch1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
   }
 
   protected onObjectMouseDown(event: MouseEvent, objectId: string): void {
@@ -858,6 +1189,107 @@ export class Canvas {
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+  }
+  
+  // Touch handlers for object dragging
+  protected onObjectTouchStart(event: TouchEvent, objectId: string): void {
+    if (event.touches.length !== 1) return; // Only handle single touch
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const obj = this.objects().find(o => o.id === objectId);
+    if (!obj) return;
+    
+    const touch = event.touches[0];
+    this.isDragging = true;
+    this.suppressHash = true;
+    this.dragStartX = touch.clientX;
+    this.dragStartY = touch.clientY;
+    this.originalObject = { ...obj };
+    this.selectedObjectId.set(objectId);
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!this.isDragging || !this.originalObject || e.touches.length !== 1) return;
+      
+      const touch = e.touches[0];
+      const dx = (touch.clientX - this.dragStartX) / this.zoom();
+      const dy = (touch.clientY - this.dragStartY) / this.zoom();
+      
+      this.objects.update(objects =>
+        objects.map(o =>
+          o.id === objectId
+            ? { ...o, x: this.originalObject!.x + dx, y: this.originalObject!.y + dy }
+            : o
+        )
+      );
+    };
+
+    const onTouchEnd = () => {
+      this.isDragging = false;
+      this.originalObject = null;
+      this.suppressHash = false;
+      if (this.hashDirty) {
+        this.scheduleHashUpdate();
+      }
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove);
+    window.addEventListener('touchend', onTouchEnd);
+  }
+  
+  // Touch handlers for transform handles
+  protected onHandleTouchStart(event: TouchEvent, objectId: string, handleType: string): void {
+    if (event.touches.length !== 1) return; // Only handle single touch
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const obj = this.objects().find(o => o.id === objectId);
+    if (!obj) return;
+    
+    const touch = event.touches[0];
+    this.isTransforming = true;
+    this.suppressHash = true;
+    this.transformStartX = touch.clientX;
+    this.transformStartY = touch.clientY;
+    this.transformHandle = handleType;
+    this.originalObject = { ...obj };
+    this.rotateStartRotation = obj.rotation;
+    this.rotateStartAngle = this.getPointerAngle(obj, touch.clientX, touch.clientY);
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!this.isTransforming || !this.originalObject || e.touches.length !== 1) return;
+      
+      const touch = e.touches[0];
+      const dx = (touch.clientX - this.transformStartX) / this.zoom();
+      const dy = (touch.clientY - this.transformStartY) / this.zoom();
+      
+      if (this.transformHandle?.startsWith('rotate-')) {
+        this.handleRotate(objectId, touch.clientX, touch.clientY);
+      } else if (this.transformHandle === 'rotate') {
+        this.handleRotate(objectId, touch.clientX, touch.clientY);
+      } else if (this.transformHandle?.startsWith('scale-')) {
+        this.handleScale(objectId, dx, dy, this.transformHandle);
+      }
+    };
+
+    const onTouchEnd = () => {
+      this.isTransforming = false;
+      this.originalObject = null;
+      this.transformHandle = null;
+      this.suppressHash = false;
+      if (this.hashDirty) {
+        this.scheduleHashUpdate();
+      }
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove);
+    window.addEventListener('touchend', onTouchEnd);
   }
 
   private handleScale(objectId: string, dx: number, dy: number, handle: string): void {
@@ -1171,6 +1603,11 @@ export class Canvas {
 
   private scheduleHashUpdate(): void {
     if (!isPlatformBrowser(this.platformId)) return;
+    if (this.skipNextHashWrite) {
+      this.skipNextHashWrite = false;
+      this.hashDirty = false;
+      return;
+    }
     // If we're suppressing writes (during interaction), mark dirty and skip
     if (this.suppressHash) {
       this.hashDirty = true;
@@ -1183,10 +1620,10 @@ export class Canvas {
     this.hashUpdateHandle = window.setTimeout(() => {
       const hash = this.serializeStateToHash();
       const prefixedHash = hash ? `#${hash}` : '';
-      console.log('[Canvas] scheduleHashUpdate - serialized hash:', prefixedHash);
-      // Only write if changed to avoid unnecessary hashchange events
+      
+      // Only write if changed from what we last wrote (not from current URL hash)
+      // This prevents echo writes but allows all legitimate state changes
       if (prefixedHash !== this.lastSerializedHash) {
-        console.log('[Canvas] scheduleHashUpdate - updating hash and sessionStorage');
         window.location.hash = prefixedHash;
         this.lastSerializedHash = prefixedHash;
         try {
@@ -1242,6 +1679,7 @@ export class Canvas {
     if (segments.length === 0) return;
 
     const nextObjects: CanvasObject[] = [];
+    const seenSegments = new Set<string>();
     let nextViewportX = this.viewportX();
     let nextViewportY = this.viewportY();
     let nextZoom = this.zoom();
@@ -1250,12 +1688,19 @@ export class Canvas {
       const [encodedRef, transformPart, flagsPart] = segment.split('/');
       if (!encodedRef || !transformPart) continue;
 
+      // Deduplicate identical segment entries in the hash to prevent repeated objects
+      const segmentKey = `${encodedRef}|${transformPart}|${flagsPart ?? ''}`;
+      if (seenSegments.has(segmentKey)) {
+        continue;
+      }
+      seenSegments.add(segmentKey);
+
       const ref = decodeURIComponent(encodedRef);
       if (ref === 'canvas') {
         const [vx, vy, vz] = transformPart.split(',').map(parseFloat);
         if (!Number.isNaN(vx)) nextViewportX = vx;
         if (!Number.isNaN(vy)) nextViewportY = vy;
-        if (!Number.isNaN(vz)) nextZoom = Math.max(0.1, Math.min(5, vz));
+        if (!Number.isNaN(vz)) nextZoom = Math.max(this.minZoom, Math.min(this.maxZoom, vz));
         continue;
       }
 
@@ -1446,6 +1891,50 @@ export class Canvas {
     }
   }
 
+  private cleanupOrphanedStorage(): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    
+    try {
+      // Collect all sourceRefs currently in use
+      const activeRefs = new Set<string>();
+      for (const obj of this.objects()) {
+        activeRefs.add(obj.sourceRef);
+      }
+      
+      // Scan localStorage for our prefixed keys
+      const keysToRemove: string[] = [];
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        
+        // Check if it's one of our keys
+        if (key.startsWith(this.dataTokenPrefix)) {
+          // Token-based entry: check if 'token:KEY' is referenced
+          const ref = `token:${key}`;
+          if (!activeRefs.has(ref)) {
+            keysToRemove.push(key);
+          }
+        } else if (key.startsWith(this.dataFilePrefix)) {
+          // File-based entry: extract filename and check if referenced
+          const filename = key.substring(this.dataFilePrefix.length);
+          if (!activeRefs.has(filename)) {
+            keysToRemove.push(key);
+          }
+        }
+      }
+      
+      // Remove orphaned entries
+      if (keysToRemove.length > 0) {
+        for (const key of keysToRemove) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      // Silently ignore errors
+    }
+  }
+
   private async renderCompositionToBlob(): Promise<Blob | null> {
     if (!isPlatformBrowser(this.platformId)) return null;
     if (this.objects().length === 0) return null;
@@ -1493,12 +1982,71 @@ export class Canvas {
     }
   }
 
+  protected async shareComposition(): Promise<void> {
+    try {
+      const blob = await this.renderCompositionToBlob();
+      if (!blob) return;
+
+      // Try to use Web Share API if available (iOS Safari supports this)
+      if (navigator.share) {
+        console.log('Share API available, creating file...');
+        const file = new File([blob], 'composition.png', { type: 'image/png' });
+        
+        // iOS Safari limitation: when sharing files, can't include url/text
+        // Share just the image file to enable "Save Image" option
+        const shareData: ShareData = {
+          files: [file],
+        };
+
+        console.log('Attempting to share with data:', shareData);
+        try {
+          await navigator.share(shareData);
+          console.log('Share successful');
+          return;
+        } catch (shareError) {
+          // User cancelled or share failed - fall through to download
+          console.error('Share failed with error:', shareError);
+        }
+      } else {
+        console.log('Share API not available, falling back to download');
+      }
+
+      // Fallback: download the image if share is not available or was cancelled
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.download = `composition-${timestamp}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error sharing composition:', error);
+    }
+  }
+
   protected async downloadImage(): Promise<void> {
     try {
       const blob = await this.renderCompositionToBlob();
       if (!blob) return;
 
-      // Download the image
+      // On mobile/iOS, prefer Web Share API to enable saving to photo library
+      if (this.isMobile() && navigator.share) {
+        const file = new File([blob], 'composition.png', { type: 'image/png' });
+        const shareData: ShareData = {
+          files: [file],
+          title: 'Composition',
+        };
+
+        try {
+          await navigator.share(shareData);
+          return;
+        } catch (shareError) {
+          // User cancelled or share not supported - fall through to download
+          console.log('Share cancelled or failed:', shareError);
+        }
+      }
+
+      // Desktop: download the image
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1515,21 +2063,24 @@ export class Canvas {
       const blob = await this.renderCompositionToBlob();
       if (!blob) return;
 
-      // Try to use Web Share API if available
-      if (navigator.share && navigator.canShare) {
+      // Try to use Web Share API if available (iOS Safari supports this)
+      if (navigator.share) {
         const file = new File([blob], 'composition.png', { type: 'image/png' });
-        const shareData = {
+        const shareData: ShareData = {
           files: [file],
           title: 'My Composition',
         };
 
-        if (navigator.canShare(shareData)) {
+        try {
           await navigator.share(shareData);
           return;
+        } catch (shareError) {
+          // User cancelled or share failed - fall through to download
+          console.log('Share cancelled or failed:', shareError);
         }
       }
 
-      // Fallback: download the image if share is not available
+      // Fallback: download the image if share is not available or was cancelled
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
