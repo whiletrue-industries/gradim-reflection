@@ -19,6 +19,7 @@ export class UrlWrapper implements OnDestroy {
   protected safeContextUrl = signal<SafeResourceUrl | null>(null);
   protected canvasVisible = signal(false);
   protected safeCanvasUrl = signal<SafeResourceUrl | null>(null);
+  protected isClosing = signal(false);
 
   constructor() {
     const randomUrl = getRandomGradimUrl();
@@ -43,6 +44,7 @@ export class UrlWrapper implements OnDestroy {
   };
 
   protected shareToCanvas(): void {
+    this.isClosing.set(false);
     const url = this.currentUrl();
     if (!url) {
       return;
@@ -62,9 +64,14 @@ export class UrlWrapper implements OnDestroy {
   }
 
   protected closeCanvas(): void {
-    this.canvasVisible.set(false);
+    if (!this.canvasVisible()) {
+      return;
+    }
+    this.isClosing.set(true);
     setTimeout(() => {
+      this.canvasVisible.set(false);
       this.safeCanvasUrl.set(null);
-    }, 300);
+      this.isClosing.set(false);
+    }, 240);
   }
 }

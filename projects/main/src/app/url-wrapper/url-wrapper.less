@@ -20,7 +20,7 @@
 .share-button-container {
   position: fixed;
   bottom: 20px;
-  right: 20px;
+  left: 20px;
   z-index: 5;
   pointer-events: auto;
 }
@@ -57,6 +57,10 @@
     height: 20px;
     flex-shrink: 0;
   }
+
+  &.close {
+    background-color: rgba(30, 30, 30, 0.95);
+  }
 }
 
 .canvas-overlay {
@@ -66,6 +70,13 @@
   height: 100vh;
   z-index: 10;
   background: rgba(0, 0, 0, 0.05);
+
+  &.slide-in-left {
+    animation: slideFromLeft 220ms ease-out;
+  }
+  &.slide-out-left {
+    animation: slideToLeft 220ms ease-in;
+  }
 }
 
 .canvas-iframe {
@@ -76,4 +87,22 @@
   border: none;
   display: block;
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes slideFromLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideToLeft {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
 }
