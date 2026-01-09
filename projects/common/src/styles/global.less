@@ -6,6 +6,11 @@
 @import './_reset.less';
 @import './_typography.less';
 
+// Prevent browser pinch zoom; canvas handles pinch gestures
+html, body {
+  touch-action: none;
+}
+
 // Import Google Fonts - Source Sans 3
 // Temporarily commented out due to network restrictions in build environment
 // @import (css) url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;700&display=swap');

@@ -44,6 +44,7 @@ export class Canvas {
   private lastSerializedHash = '';
   private suppressHash = false; // suppress hash writes during interactions
   private hashDirty = false;    // track pending changes while suppressed
+  private skipNextHashWrite = false; // allow a deliberate empty-hash clear without rewriting it
   private wheelFlushHandle: number | null = null; // debounce wheel flush
   private ephemeralTokens = new Map<string, string>(); // in-memory fallback for tokens
   // 1x1 transparent PNG to keep image objects alive when content can't resolve yet
@@ -172,21 +173,31 @@ export class Canvas {
       let hashToRestore = '';
       
       try {
+        const currentUrlHash = window.location.hash;
         const storedHash = sessionStorage.getItem('canvasLastHash');
+        console.log('[Canvas] Constructor - currentUrlHash:', currentUrlHash);
         console.log('[Canvas] Constructor - storedHash:', storedHash);
-        if (storedHash) {
+        
+        // If URL hash is explicitly empty but sessionStorage has a value,
+        // the user deliberately cleared it → respect that by clearing storage
+        if ((!currentUrlHash || currentUrlHash === '#') && storedHash) {
+          console.log('[Canvas] Constructor - hash was cleared, removing sessionStorage');
+          sessionStorage.removeItem('canvasLastHash');
+          this.skipNextHashWrite = true;
+          // Don't restore anything
+        } else if (storedHash) {
           // Use the properly encoded version from sessionStorage
           hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
           console.log('[Canvas] Constructor - using hash from sessionStorage:', hashToRestore);
-        } else {
-          // Fallback to window.location.hash if no stored hash (first visit)
-          hashToRestore = window.location.hash;
+          
+          // Update window.location to use the properly encoded version
+          if (hashToRestore !== currentUrlHash) {
+            window.history.replaceState(null, '', hashToRestore);
+          }
+        } else if (currentUrlHash) {
+          // No stored hash, but URL has one → use it
+          hashToRestore = currentUrlHash;
           console.log('[Canvas] Constructor - using hash from window.location:', hashToRestore);
-        }
-        
-        // Update window.location to use the properly encoded version
-        if (hashToRestore && hashToRestore !== window.location.hash) {
-          window.history.replaceState(null, '', hashToRestore);
         }
       } catch (e) {
         console.error('[Canvas] Constructor - error accessing sessionStorage:', e);
@@ -222,9 +233,29 @@ export class Canvas {
 
   private onHashChange = (): void => {
     if (!isPlatformBrowser(this.platformId)) return;
-    if (window.location.hash === this.lastSerializedHash) return;
-    this.applyHashState(window.location.hash);
-    this.lastSerializedHash = window.location.hash;
+    const currentHash = window.location.hash || '';
+
+    // If the user manually cleared the hash, clear state and skip the next write
+    if (!currentHash || currentHash === '#') {
+      try {
+        sessionStorage.removeItem('canvasLastHash');
+      } catch {}
+      this.lastSerializedHash = '';
+      this.suppressHash = true;
+      this.objects.set([]);
+      this.selectedObjectId.set(null);
+      this.viewportX.set(0);
+      this.viewportY.set(0);
+      this.zoom.set(1);
+      this.suppressHash = false;
+      this.hashDirty = false;
+      this.skipNextHashWrite = true;
+      return;
+    }
+
+    if (currentHash === this.lastSerializedHash) return;
+    this.applyHashState(currentHash);
+    this.lastSerializedHash = currentHash;
   };
 
   private setupEventListeners(): void {
@@ -1603,6 +1634,11 @@ export class Canvas {
 
   private scheduleHashUpdate(): void {
     if (!isPlatformBrowser(this.platformId)) return;
+    if (this.skipNextHashWrite) {
+      this.skipNextHashWrite = false;
+      this.hashDirty = false;
+      return;
+    }
     // If we're suppressing writes (during interaction), mark dirty and skip
     if (this.suppressHash) {
       this.hashDirty = true;
@@ -1616,6 +1652,14 @@ export class Canvas {
       const hash = this.serializeStateToHash();
       const prefixedHash = hash ? `#${hash}` : '';
       console.log('[Canvas] scheduleHashUpdate - serialized hash:', prefixedHash);
+      const currentHash = window.location.hash || '';
+      // Never overwrite a richer hash with a shorter one (prevents accidental loss of objects when multiple updates race)
+      if (currentHash && currentHash.length > prefixedHash.length) {
+        console.log('[Canvas] scheduleHashUpdate - skip write because current hash is longer (preserve data)');
+        this.hashDirty = false;
+        this.hashUpdateHandle = null;
+        return;
+      }
       // Only write if changed to avoid unnecessary hashchange events
       if (prefixedHash !== this.lastSerializedHash) {
         console.log('[Canvas] scheduleHashUpdate - updating hash and sessionStorage');
