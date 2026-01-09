@@ -310,6 +310,20 @@ export class Canvas {
 
   private animateFitToContent(): void {
     const targets = this.computeFitToViewTargets();
+    
+    // Set initial view position to center-left before animating
+    // This creates a "zoom in from left" effect
+    const bounds = this.calculateCompositionBounds();
+    if (bounds) {
+      const { centerY: vcy } = this.getVisibleViewportMetrics();
+      const contentCenterY = bounds.y + bounds.height / 2;
+      
+      // Position content centered vertically, but far to the left
+      this.zoom.set(targets.zoom * 0.5); // Start at half the target zoom
+      this.viewportX.set(-bounds.width * targets.zoom); // Position off-screen to the left
+      this.viewportY.set(vcy - contentCenterY * targets.zoom * 0.5); // Center vertically at starting zoom
+    }
+    
     this.animateToView(targets.zoom, targets.viewportX, targets.viewportY, 450);
   }
 
