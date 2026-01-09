@@ -8,12 +8,18 @@ GraDiM Reflections is an independent platform for interactive applications that 
 
 ### Main Application
 - **Location:** `projects/main`
-- **Purpose:** Hosts the gallery of inner apps and manages navigation
+- **Purpose:** Hosts the gallery of inner apps, provides URL wrapper functionality, and manages navigation
 - **Technology:** Angular 21 standalone application
+
+**Features:**
+- URL Wrapper: Displays external URLs in an iframe with an "Open in Canvas" button
+  - Accessible at `/?url=<external-url>` (defaults to https://gradim-wall.netlify.app/)
+  - Transitions to sample-reflect canvas with the URL as an input layer
+  - Uses sessionStorage to pass URLs to avoid encoding issues with hash-based navigation
 
 ### Inner Applications
 Inner apps are independent Angular applications that can be embedded within the main app:
-- **sample-reflect** (`projects/sample-reflect`): Example inner application demonstrating the architecture
+- **sample-reflect** (`projects/sample-reflect`): Interactive canvas application for manipulating and composing visual content
 
 Each inner app:
 - Uses the shared `Layout` component from the common library
