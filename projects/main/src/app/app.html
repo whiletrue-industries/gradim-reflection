@@ -1,1 +1,23 @@
-<router-outlet />
+<div class="iframe-container">
+  <!-- Context iframe (URL wrapper) - always visible below -->
+  @if (safeContextUrl()) {
+    <iframe 
+      #contextIframe
+      [src]="safeContextUrl()" 
+      class="context-iframe"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+    ></iframe>
+  }
+  
+  <!-- Canvas iframe - shown on top when active -->
+  @if (canvasVisible() && safeCanvasUrl()) {
+    <div class="canvas-overlay">
+      <iframe 
+        #canvasIframe
+        [src]="safeCanvasUrl()"
+        class="canvas-iframe"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-storage-access-by-user-activation"
+      ></iframe>
+    </div>
+  }
+</div>

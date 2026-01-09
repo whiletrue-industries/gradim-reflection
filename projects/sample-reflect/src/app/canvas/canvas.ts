@@ -284,13 +284,19 @@ export class Canvas {
   protected returnToUrlWrapper(): void {
     if (!isPlatformBrowser(this.platformId)) return;
     
-    const originalUrl = this.urlWrapperUrl();
-    if (originalUrl) {
-      // Navigate back to URL wrapper with the original URL
-      window.location.href = `/?url=${encodeURIComponent(originalUrl)}`;
+    // Send message to parent window to close canvas
+    if (window.parent !== window) {
+      window.parent.postMessage({
+        type: 'closeCanvas'
+      }, '*');
     } else {
-      // Fallback to main page
-      window.location.href = '/';
+      // Fallback if not in iframe - navigate back
+      const originalUrl = this.urlWrapperUrl();
+      if (originalUrl) {
+        window.location.href = `/?url=${encodeURIComponent(originalUrl)}`;
+      } else {
+        window.location.href = '/';
+      }
     }
   }
 
