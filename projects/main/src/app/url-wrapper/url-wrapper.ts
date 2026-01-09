@@ -58,7 +58,10 @@ export class UrlWrapper implements OnDestroy {
       return;
     }
 
-    const canvasUrl = `/sample-reflect?loadUrl=${urlKey}`;
+    // Construct canvas URL relative to current location for GitHub Pages compatibility
+    // Get the base path (e.g., '/gradim-reflection/' on GitHub Pages)
+    const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+    const canvasUrl = `${basePath}sample-reflect/?loadUrl=${urlKey}`;
     this.safeCanvasUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(canvasUrl));
     this.canvasVisible.set(true);
   }
