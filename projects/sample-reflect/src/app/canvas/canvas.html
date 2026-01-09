@@ -228,4 +228,27 @@
   <div class="canvas-instructions">
     <p>{{ instructionsText() }}</p>
   </div>
+  
+  <!-- URL input modal -->
+  @if (showUrlModal()) {
+    <div class="url-modal-overlay" (click)="cancelUrlModal()">
+      <div class="url-modal" (click)="$event.stopPropagation()">
+        <h3>Add URL</h3>
+        <input
+          #urlInput
+          type="url"
+          class="url-input"
+          placeholder="Paste URL here..."
+          [value]="urlInputValue()"
+          (input)="urlInputValue.set(urlInput.value)"
+          (keydown.enter)="submitUrlModal()"
+          (keydown.escape)="cancelUrlModal()"
+        />
+        <div class="url-modal-actions">
+          <button class="url-cancel" (click)="cancelUrlModal()">Cancel</button>
+          <button class="url-submit" (click)="submitUrlModal()">Add</button>
+        </div>
+      </div>
+    </div>
+  }
 </div>

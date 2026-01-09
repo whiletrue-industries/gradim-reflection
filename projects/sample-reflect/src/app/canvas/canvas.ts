@@ -40,7 +40,7 @@ export class Canvas {
   private readonly minZoom = 0.1;
   private readonly maxZoom = 5;
   private hashUpdateHandle: number | null = null;
-  private readonly hashThrottleMs = 80;
+  private readonly hashThrottleMs = 300; // Increased from 80ms for more robust handling
   private lastSerializedHash = '';
   private suppressHash = false; // suppress hash writes during interactions
   private hashDirty = false;    // track pending changes while suppressed
@@ -79,6 +79,9 @@ export class Canvas {
   protected shareMenuOpen = signal(false);
   // Add menu (mobile)
   protected addMenuOpen = signal(false);
+  // URL input modal
+  protected showUrlModal = signal(false);
+  protected urlInputValue = signal('');
   
   // Iframe interaction state
   protected hoveredIframeId = signal<string | null>(null);
@@ -325,6 +328,17 @@ export class Canvas {
   }
 
   private onPaste(event: ClipboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    const active = document.activeElement as HTMLElement | null;
+    const isFormField = (el: HTMLElement | null) => !!el && (
+      el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.closest('.url-input') !== null
+    );
+
+    // If focus is on an input/textarea/contentEditable (e.g., URL modal), do not intercept paste
+    if (isFormField(target) || isFormField(active)) {
+      return;
+    }
+
     const text = event.clipboardData?.getData('text');
     if (text && this.isValidUrl(text)) {
       // Add iframe at center of viewport
@@ -418,6 +432,22 @@ export class Canvas {
 
   private async fetchOgImage(url: string, objectId: string): Promise<void> {
     if (!isPlatformBrowser(this.platformId)) return;
+    const host = window.location.hostname.toLowerCase();
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+
+    // Gradim Wall: derive og:image directly, skip API entirely
+    const gradimOg = this.getGradimWallOgImage(url);
+    if (gradimOg) {
+      console.log('[Canvas] fetchOgImage: Gradim Wall detected, using direct og heuristic');
+      this.updateObjectOgImage(objectId, gradimOg);
+      return;
+    }
+
+    if (!isLocalHost) {
+      console.log('[Canvas] fetchOgImage: non-local host detected, skipping API and using fallback:', host);
+      this.trySetDevelopmentOgImage(url, objectId);
+      return;
+    }
     
     let ogImageFetched = false;
     
@@ -444,11 +474,11 @@ export class Canvas {
           console.log('[Canvas] fetchOgImage: no ogImage in response');
         }
       } else {
-        console.log('[Canvas] fetchOgImage: not OK or not JSON, falling back to dev mode');
+        console.log('[Canvas] fetchOgImage: not OK or not JSON, status:', response.status, 'falling back to dev mode');
       }
     } catch (error) {
       // API endpoint not available (dev mode) or failed
-      console.log('[Canvas] fetchOgImage: fetch failed, will try fallback:', error);
+      console.log('[Canvas] fetchOgImage: fetch failed, will try fallback. Error:', error);
     }
     
     // If og:image wasn't fetched from API, try development fallback
@@ -475,15 +505,11 @@ export class Canvas {
         'www.youtube.com': 'https://www.youtube.com/img/desktop/yt_1200.png',
       };
 
-      let ogImage = devOgImages[hostname];
+      let ogImage: string | undefined = devOgImages[hostname];
 
       // Gradim Wall heuristic (mirrors server-side extraction)
       if (!ogImage && hostname === 'gradim-wall.netlify.app') {
-        const segments = urlObj.pathname.split('/').filter(Boolean);
-        const id = decodeURIComponent(segments[segments.length - 1] || '');
-        if (id && /^[A-Za-z0-9_\-]+$/.test(id)) {
-          ogImage = `https://gradim.fh-potsdam.de/omeka-s/files/large/${id}.jpg`;
-        }
+        ogImage = this.getGradimWallOgImage(urlObj.toString()) || undefined;
       }
 
       if (ogImage) {
@@ -500,6 +526,19 @@ export class Canvas {
       // Invalid URL or other error - silently ignore
       console.error('[Canvas] trySetDevelopmentOgImage: error:', error);
     }
+  }
+
+  private getGradimWallOgImage(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.hostname.toLowerCase() !== 'gradim-wall.netlify.app') return null;
+      const segments = urlObj.pathname.split('/').filter(Boolean);
+      const id = decodeURIComponent(segments[segments.length - 1] || '');
+      if (id && /^[A-Za-z0-9_\-]+$/.test(id)) {
+        return `https://gradim.fh-potsdam.de/omeka-s/files/large/${id}.jpg`;
+      }
+    } catch {}
+    return null;
   }
 
   private extractOgImage(html: string): string | null {
@@ -900,7 +939,7 @@ export class Canvas {
         this.scheduleHashUpdate();
       }
       this.wheelFlushHandle = null;
-    }, 150);
+    }, 300); // Increased from 150ms for more robust handling
   }
 
   // Share menu helpers (mobile)
@@ -933,9 +972,32 @@ export class Canvas {
   }
   protected onAddUrlClick(): void {
     this.addMenuOpen.set(false);
-    const url = window.prompt('Paste URL');
-    if (!url) return;
-    this.addIframeFromUrl(url.trim());
+    // Show custom modal instead of prompt
+    this.urlInputValue.set('');
+    this.showUrlModal.set(true);
+    // Focus input after a short delay to ensure modal is rendered
+    setTimeout(() => {
+      const input = document.querySelector('.url-input') as HTMLInputElement;
+      input?.focus();
+    }, 100);
+  }
+  
+  protected submitUrlModal(): void {
+    const url = this.urlInputValue().trim();
+    this.showUrlModal.set(false);
+    
+    if (!url) {
+      console.log('[Canvas] No URL provided');
+      return;
+    }
+    
+    console.log('[Canvas] Adding URL:', url);
+    this.addIframeFromUrl(url);
+  }
+  
+  protected cancelUrlModal(): void {
+    this.showUrlModal.set(false);
+    this.urlInputValue.set('');
   }
 
   private addIframeFromUrl(url: string): void {
@@ -944,6 +1006,7 @@ export class Canvas {
       return;
     }
     const sourceRef = this.deriveSourceRef(url);
+    const gradimOg = this.getGradimWallOgImage(url);
     const newObject: CanvasObject = {
       id: this.generateId(),
       type: 'iframe',
@@ -956,10 +1019,14 @@ export class Canvas {
       sourceRef,
       originalAspectRatio: 400 / 600,
       safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
-      displayMode: 'image',
+      displayMode: gradimOg ? 'image' : 'image',
+      ogImage: gradimOg ?? undefined,
     };
     this.addObject(newObject);
-    this.fetchOgImage(url, newObject.id);
+    // If Gradim Wall, we already set og; skip API
+    if (!gradimOg) {
+      this.fetchOgImage(url, newObject.id);
+    }
   }
   
   // Touch event handlers
@@ -1607,6 +1674,7 @@ export class Canvas {
     if (segments.length === 0) return;
 
     const nextObjects: CanvasObject[] = [];
+    const seenSegments = new Set<string>();
     let nextViewportX = this.viewportX();
     let nextViewportY = this.viewportY();
     let nextZoom = this.zoom();
@@ -1614,6 +1682,13 @@ export class Canvas {
     for (const segment of segments) {
       const [encodedRef, transformPart, flagsPart] = segment.split('/');
       if (!encodedRef || !transformPart) continue;
+
+      // Deduplicate identical segment entries in the hash to prevent repeated objects
+      const segmentKey = `${encodedRef}|${transformPart}|${flagsPart ?? ''}`;
+      if (seenSegments.has(segmentKey)) {
+        continue;
+      }
+      seenSegments.add(segmentKey);
 
       const ref = decodeURIComponent(encodedRef);
       if (ref === 'canvas') {
