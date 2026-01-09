@@ -138,6 +138,8 @@ export class Canvas {
   private rotateStartAngle = 0;
   private rotateStartRotation = 0;
   private viewAnimationFrame: number | null = null;
+  private pendingInitialFitTimeout: number | null = null;
+  private pendingFitAfterImageLoad = false;
   // UI chrome safe areas (px) to improve visual centering
   private readonly safeInsetTop = 20;
   private readonly safeInsetBottom = 100;
@@ -249,7 +251,17 @@ export class Canvas {
               sessionStorage.removeItem(loadUrlKey);
               // Add the URL as an object on the canvas
               this.addUrlObject(urlToLoad);
-              this.animateFitToContent();
+              // Defer fitting until og:image is ready; fallback if it never arrives
+              if (this.pendingInitialFitTimeout !== null) {
+                window.clearTimeout(this.pendingInitialFitTimeout);
+              }
+              this.pendingInitialFitTimeout = window.setTimeout(() => {
+                // Fallback fit if og:image wasn't fetched
+                if (this.pendingInitialFitTimeout !== null) {
+                  this.animateFitToContent();
+                  this.pendingInitialFitTimeout = null;
+                }
+              }, 1500);
               // Clean up the query parameter from the URL
               urlParams.delete('loadUrl');
               const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
@@ -297,29 +309,8 @@ export class Canvas {
   }
 
   private animateFitToContent(): void {
-    const bounds = this.calculateCompositionBounds();
-    if (!bounds) {
-      return;
-    }
-
-    const padding = 100;
-    const { width: vw, height: vh, centerX: vcx, centerY: vcy } = this.getVisibleViewportMetrics();
-    const availableWidth = Math.max(0, vw - 2 * padding);
-    const availableHeight = Math.max(0, vh - 2 * padding);
-
-    const zoomX = availableWidth / bounds.width;
-    const zoomY = availableHeight / bounds.height;
-    const targetZoom = Math.min(Math.max(this.minZoom, Math.min(zoomX, zoomY, this.maxZoom)), this.maxZoom);
-
-    const centerX = bounds.x + bounds.width / 2;
-    const centerY = bounds.y + bounds.height / 2;
-    const viewportCenterX = vcx;
-    const viewportCenterY = vcy;
-
-    const targetViewportX = viewportCenterX - centerX * targetZoom;
-    const targetViewportY = viewportCenterY - centerY * targetZoom;
-
-    this.animateToView(targetZoom, targetViewportX, targetViewportY, 450);
+    const targets = this.computeFitToViewTargets();
+    this.animateToView(targets.zoom, targets.viewportX, targets.viewportY, 450);
   }
 
   private animateToView(targetZoom: number, targetViewportX: number, targetViewportY: number, durationMs = 450): void {
@@ -737,16 +728,22 @@ export class Canvas {
                 ogImage,
                 width: newWidth,
                 height: newHeight,
-                originalAspectRatio: aspectRatio
+                originalAspectRatio: aspectRatio,
+                // Ensure the preview mode is image before centering
+                displayMode: 'image'
               }
             : obj
         )
       );
       this.scheduleHashUpdate();
-      // After image dimensions are known, refit view to center all content
-      if (this.cameFromUrlWrapper()) {
-        afterNextRender(() => this.animateFitToContent());
+      // After image dimensions are known, mark that we need to fit once the image loads in DOM
+      // Cancel any pending fallback to avoid double-fitting
+      if (this.pendingInitialFitTimeout !== null) {
+        window.clearTimeout(this.pendingInitialFitTimeout);
+        this.pendingInitialFitTimeout = null;
       }
+      // Set flag to trigger fit when the actual img element loads
+      this.pendingFitAfterImageLoad = true;
     };
     img.onerror = () => {
       // If image fails to load, just set the og:image without resizing
@@ -1041,45 +1038,42 @@ export class Canvas {
     this.gridScale.set(bestScale);
   }
 
-  protected fitToView(): void {
+  private computeFitToViewTargets(): { zoom: number; viewportX: number; viewportY: number } {
     const objs = this.objects();
     if (objs.length === 0) {
-      // No objects, just reset to default
-      this.zoom.set(1);
-      this.viewportX.set(0);
-      this.viewportY.set(0);
-      return;
+      return { zoom: 1, viewportX: 0, viewportY: 0 };
     }
 
-    // Calculate bounding box of all objects
     const bounds = this.calculateCompositionBounds();
     if (!bounds) {
-      this.zoom.set(1);
-      this.viewportX.set(0);
-      this.viewportY.set(0);
-      return;
+      return { zoom: 1, viewportX: 0, viewportY: 0 };
     }
 
-    // Add padding around objects
     const padding = 100;
     const { width: vw, height: vh, centerX: vcx, centerY: vcy } = this.getVisibleViewportMetrics();
     const availableWidth = Math.max(0, vw - 2 * padding);
     const availableHeight = Math.max(0, vh - 2 * padding);
 
-    // Calculate zoom to fit
     const zoomX = availableWidth / bounds.width;
     const zoomY = availableHeight / bounds.height;
     const newZoom = Math.min(zoomX, zoomY, this.maxZoom);
 
-    // Center the composition
     const centerX = bounds.x + bounds.width / 2;
     const centerY = bounds.y + bounds.height / 2;
     const viewportCenterX = vcx;
     const viewportCenterY = vcy;
 
-    this.zoom.set(newZoom);
-    this.viewportX.set(viewportCenterX - centerX * newZoom);
-    this.viewportY.set(viewportCenterY - centerY * newZoom);
+    const viewportX = viewportCenterX - centerX * newZoom;
+    const viewportY = viewportCenterY - centerY * newZoom;
+
+    return { zoom: newZoom, viewportX, viewportY };
+  }
+
+  protected fitToView(): void {
+    const { zoom, viewportX, viewportY } = this.computeFitToViewTargets();
+    this.zoom.set(zoom);
+    this.viewportX.set(viewportX);
+    this.viewportY.set(viewportY);
   }
 
   private onWheel(event: WheelEvent): void {
@@ -1640,6 +1634,15 @@ export class Canvas {
 
   // Attempt to hide scrollbars inside same-origin iframes by injecting CSS
   // When iframe is interactive, scrolling will be enabled
+  protected onOgImageLoad(event: Event, objectId: string): void {
+    // Called when the og:image in the DOM has fully loaded
+    if (this.pendingFitAfterImageLoad) {
+      this.pendingFitAfterImageLoad = false;
+      // Image is already loaded and rendered, trigger fit directly
+      this.animateFitToContent();
+    }
+  }
+
   protected onIframeLoad(event: Event, objectId: string): void {
     const iframe = event.target as HTMLIFrameElement | null;
     if (!iframe) return;

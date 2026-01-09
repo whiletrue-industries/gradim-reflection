@@ -63,6 +63,8 @@
     pointer-events: none;
     display: block;
     border: none;
+    position: relative;
+    z-index: 1;
   }
 
   // Wrapper for iframes to handle hover/interaction state
@@ -182,7 +184,7 @@
   .handle {
     position: absolute;
     pointer-events: all;
-    z-index: 10;
+    z-index: 15;
     user-select: none;
     transform-origin: center;
     
@@ -269,7 +271,7 @@
     width: 20px;
     height: 20px;
     pointer-events: all;
-    z-index: 10;
+    z-index: 15;
     cursor: grab;
     
     &:hover {
@@ -327,7 +329,7 @@
     border-radius: 6px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     pointer-events: all;
-    z-index: 15;
+    z-index: 20;
     
     .toggle-btn {
       display: flex;

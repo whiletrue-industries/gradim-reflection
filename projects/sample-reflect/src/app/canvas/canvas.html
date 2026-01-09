@@ -25,7 +25,7 @@
         } @else if (obj.type === 'iframe') {
           @if (obj.displayMode === 'image' && obj.ogImage) {
             <!-- Show og:image preview when in image mode -->
-            <img [src]="obj.ogImage" alt="URL preview" class="object-content" />
+            <img [src]="obj.ogImage" alt="URL preview" class="object-content" (load)="onOgImageLoad($event, obj.id)" />
           } @else {
             <!-- Show iframe with interaction overlay when in iframe mode -->
             <div 
