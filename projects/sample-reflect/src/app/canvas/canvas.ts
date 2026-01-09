@@ -1049,7 +1049,9 @@ export class Canvas {
       return { zoom: 1, viewportX: 0, viewportY: 0 };
     }
 
-    const padding = 100;
+    // Use smaller padding on mobile for better space utilization
+    const isMobileDevice = this.isMobile();
+    const padding = isMobileDevice ? 20 : 40;
     const { width: vw, height: vh, centerX: vcx, centerY: vcy } = this.getVisibleViewportMetrics();
     const availableWidth = Math.max(0, vw - 2 * padding);
     const availableHeight = Math.max(0, vh - 2 * padding);
