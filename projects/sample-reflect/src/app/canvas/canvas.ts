@@ -179,12 +179,12 @@ export class Canvas {
         console.log('[Canvas] Constructor - storedHash:', storedHash);
         
         // If URL hash is explicitly empty but sessionStorage has a value,
-        // the user deliberately cleared it → respect that by clearing storage
+        // the user deliberately cleared it → respect that by clearing storage and skipping restore
         if ((!currentUrlHash || currentUrlHash === '#') && storedHash) {
-          console.log('[Canvas] Constructor - hash was cleared, removing sessionStorage');
+          console.log('[Canvas] Constructor - hash was cleared by user, removing sessionStorage');
           sessionStorage.removeItem('canvasLastHash');
           this.skipNextHashWrite = true;
-          // Don't restore anything
+          hashToRestore = ''; // Don't restore anything
         } else if (storedHash) {
           // Use the properly encoded version from sessionStorage
           hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
@@ -207,27 +207,10 @@ export class Canvas {
       // Suppress hash writes during initial state restoration
       this.suppressHash = true;
       console.log('[Canvas] Constructor - applying hash state:', hashToRestore);
-      this.applyHashState(hashToRestore);
+      if (hashToRestore) {
+        this.applyHashState(hashToRestore);
+      }
       this.suppressHash = false;
-      
-      // Additional safeguard: restore hash after Angular hydration completes
-      afterNextRender(() => {
-        console.log('[Canvas] afterNextRender - window.location.hash:', window.location.hash);
-        try {
-          const storedHash = sessionStorage.getItem('canvasLastHash');
-          console.log('[Canvas] afterNextRender - storedHash:', storedHash);
-          if (storedHash && !window.location.hash) {
-            const hashValue = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
-            console.log('[Canvas] afterNextRender - restoring hash:', hashValue);
-            window.history.replaceState(null, '', hashValue);
-            this.suppressHash = true;
-            this.applyHashState(hashValue);
-            this.suppressHash = false;
-          }
-        } catch (e) {
-          console.error('[Canvas] afterNextRender - error:', e);
-        }
-      });
     }
   }
 
