@@ -248,11 +248,17 @@ export class Canvas {
     
     // If current hash matches what we just serialized, this is our own write - ignore it
     if (currentHash === currentPrefixed || currentHash === this.lastSerializedHash) {
-      console.log('[Canvas] onHashChange - ignoring our own write');
       return;
     }
     
-    console.log('[Canvas] onHashChange - external change detected, applying');
+    // SAFETY: Never apply a shorter hash if we have a longer one and current state has objects
+    // This prevents data loss during rapid zoom when hash writes race
+    if (this.objects().length > 0 && currentHash.length < this.lastSerializedHash.length) {
+      // Keep our current state and update lastSerializedHash to prevent repeated attempts
+      this.lastSerializedHash = currentPrefixed;
+      return;
+    }
+    
     this.applyHashState(currentHash);
     this.lastSerializedHash = currentHash;
   };
@@ -1649,19 +1655,15 @@ export class Canvas {
     this.hashUpdateHandle = window.setTimeout(() => {
       const hash = this.serializeStateToHash();
       const prefixedHash = hash ? `#${hash}` : '';
-      console.log('[Canvas] scheduleHashUpdate - serialized hash:', prefixedHash.substring(0, 100) + '...');
       
       // Only write if changed from what we last wrote (not from current URL hash)
       // This prevents echo writes but allows all legitimate state changes
       if (prefixedHash !== this.lastSerializedHash) {
-        console.log('[Canvas] scheduleHashUpdate - updating hash and sessionStorage');
         window.location.hash = prefixedHash;
         this.lastSerializedHash = prefixedHash;
         try {
           sessionStorage.setItem('canvasLastHash', prefixedHash);
         } catch {}
-      } else {
-        console.log('[Canvas] scheduleHashUpdate - skipping, hash unchanged');
       }
       this.hashDirty = false;
       this.hashUpdateHandle = null;
