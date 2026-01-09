@@ -47,6 +47,13 @@ export class Canvas {
   private skipNextHashWrite = false; // allow a deliberate empty-hash clear without rewriting it
   private wheelFlushHandle: number | null = null; // debounce wheel flush
   private ephemeralTokens = new Map<string, string>(); // in-memory fallback for tokens
+  
+  // Default dimensions for new URL objects
+  private readonly defaultIframeWidth = 600;
+  private readonly defaultIframeHeight = 400;
+  private readonly defaultViewportWidth = 1920;
+  private readonly defaultViewportHeight = 1080;
+  
   // 1x1 transparent PNG to keep image objects alive when content can't resolve yet
   private readonly transparentPixel =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/hsrLxkAAAAASUVORK5CYII=';
@@ -208,8 +215,62 @@ export class Canvas {
       // Clean up orphaned localStorage entries after initial load
       afterNextRender(() => {
         this.cleanupOrphanedStorage();
+        
+        // Check for loadUrl query parameter (from URL wrapper)
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const loadUrlKey = urlParams.get('loadUrl');
+          if (loadUrlKey) {
+            const urlToLoad = sessionStorage.getItem(loadUrlKey);
+            if (urlToLoad) {
+              // Clean up the stored URL
+              sessionStorage.removeItem(loadUrlKey);
+              // Add the URL as an object on the canvas
+              this.addUrlObject(urlToLoad);
+              // Clean up the query parameter from the URL
+              urlParams.delete('loadUrl');
+              const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
+              window.history.replaceState(null, '', newUrl);
+            }
+          }
+        } catch (e) {
+          // Silently handle errors in URL loading
+        }
       });
     }
+  }
+
+  private addUrlObject(url: string): void {
+    // Add URL as an iframe object centered on the canvas
+    const centerX = this.defaultViewportWidth / 2 - this.defaultIframeWidth / 2;
+    const centerY = this.defaultViewportHeight / 2 - this.defaultIframeHeight / 2;
+    // Guard against division by zero
+    const aspectRatio = this.defaultIframeWidth > 0
+      ? this.defaultIframeHeight / this.defaultIframeWidth
+      : 1;
+
+    // Use current zoom or default to 1 if invalid
+    const currentZoom = this.zoom() || 1;
+
+    const newObject: CanvasObject = {
+      id: this.generateId(),
+      type: 'iframe',
+      x: centerX / currentZoom,
+      y: centerY / currentZoom,
+      width: this.defaultIframeWidth,
+      height: this.defaultIframeHeight,
+      rotation: 0,
+      content: url,
+      sourceRef: url,
+      originalAspectRatio: aspectRatio,
+      safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
+      displayMode: 'image', // Default to image view (og:image preview)
+    };
+
+    this.addObject(newObject);
+
+    // Fetch og:image metadata in the background
+    this.fetchOgImage(url, newObject.id);
   }
 
   private onHashChange = (): void => {
