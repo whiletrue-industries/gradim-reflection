@@ -1,5 +1,5 @@
 import { Component, signal, computed, ChangeDetectionStrategy, inject } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { CommonModule } from '@angular/common';
 
@@ -12,6 +12,7 @@ import { CommonModule } from '@angular/common';
 })
 export class UrlWrapper {
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
   private sanitizer = inject(DomSanitizer);
 
   protected url = signal<string>('');
@@ -32,22 +33,21 @@ export class UrlWrapper {
     const currentUrl = this.url();
     if (!currentUrl) return;
 
-    // Navigate to sample-reflect with the URL in the hash
-    // Hash format: #canvas/x,y,zoom#encodedURL/x,y,scale,rotation/flags
-    // The canvas component uses # as a delimiter between segments
-    const encodedUrl = encodeURIComponent(currentUrl);
-    // Calculate position to center the iframe in viewport (assuming 1920x1080 viewport)
-    const centerX = 960 - 300; // viewport center - half of iframe width
-    const centerY = 540 - 200; // viewport center - half of iframe height
-    const scale = 3; // 600px width = 200 * 3 scale
-    const hash = `canvas/0,0,1#${encodedUrl}/${centerX},${centerY},${scale},0/type:iframe,ratio:0.667,mode:image`;
-    
-    // Clear sessionStorage to prevent old hash from being restored
+    // Store the URL in sessionStorage with a unique key
+    const urlKey = `pending-canvas-url-${Date.now()}`;
     try {
-      sessionStorage.removeItem('canvasLastHash');
-    } catch {}
-    
-    // Navigate using full URL to preserve hash
-    window.location.href = `${window.location.origin}/sample-reflect#${hash}`;
+      sessionStorage.setItem(urlKey, currentUrl);
+      console.log('[URL Wrapper] Stored URL with key:', urlKey, 'URL:', currentUrl);
+    } catch {
+      console.error('Failed to store URL in sessionStorage');
+      return;
+    }
+
+    // Navigate to sample-reflect with the URL key as a query parameter
+    // The canvas will read the URL from sessionStorage
+    console.log('[URL Wrapper] Navigating to /sample-reflect with loadUrl:', urlKey);
+    this.router.navigate(['/sample-reflect'], {
+      queryParams: { loadUrl: urlKey }
+    });
   }
 }

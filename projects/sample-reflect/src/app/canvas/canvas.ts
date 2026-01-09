@@ -157,7 +157,9 @@ export class Canvas {
         
         // Update window.location to use the properly encoded version
         if (hashToRestore && hashToRestore !== window.location.hash) {
-          window.history.replaceState(null, '', hashToRestore);
+          // Preserve the path and query parameters when updating the hash
+          const newUrl = window.location.pathname + window.location.search + hashToRestore;
+          window.history.replaceState(null, '', newUrl);
         }
       } catch (e) {
         console.error('[Canvas] Constructor - error accessing sessionStorage:', e);
@@ -179,16 +181,62 @@ export class Canvas {
           if (storedHash && !window.location.hash) {
             const hashValue = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
             console.log('[Canvas] afterNextRender - restoring hash:', hashValue);
-            window.history.replaceState(null, '', hashValue);
+            // Preserve the path and query parameters when updating the hash
+            const newUrl = window.location.pathname + window.location.search + hashValue;
+            window.history.replaceState(null, '', newUrl);
             this.suppressHash = true;
             this.applyHashState(hashValue);
             this.suppressHash = false;
+          }
+          
+          // Check for loadUrl query parameter (from URL wrapper)
+          const urlParams = new URLSearchParams(window.location.search);
+          const loadUrlKey = urlParams.get('loadUrl');
+          if (loadUrlKey) {
+            const urlToLoad = sessionStorage.getItem(loadUrlKey);
+            if (urlToLoad) {
+              console.log('[Canvas] Loading URL from query parameter:', urlToLoad);
+              // Clean up the stored URL
+              sessionStorage.removeItem(loadUrlKey);
+              // Add the URL as an object on the canvas
+              this.addUrlObject(urlToLoad);
+              // Clean up the query parameter from the URL
+              urlParams.delete('loadUrl');
+              const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
+              window.history.replaceState(null, '', newUrl);
+            }
           }
         } catch (e) {
           console.error('[Canvas] afterNextRender - error:', e);
         }
       });
     }
+  }
+
+  private addUrlObject(url: string): void {
+    // Add URL as an iframe object centered on the canvas
+    const centerX = 960 - 300; // viewport center - half of iframe width
+    const centerY = 540 - 200; // viewport center - half of iframe height
+    
+    const newObject: CanvasObject = {
+      id: this.generateId(),
+      type: 'iframe',
+      x: centerX / this.zoom(),
+      y: centerY / this.zoom(),
+      width: 600,
+      height: 400,
+      rotation: 0,
+      content: url,
+      sourceRef: url,
+      originalAspectRatio: 400 / 600,
+      safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
+      displayMode: 'image', // Default to image view (og:image preview)
+    };
+    
+    this.addObject(newObject);
+    
+    // Fetch og:image metadata in the background
+    this.fetchOgImage(url, newObject.id);
   }
 
   private onHashChange = (): void => {
