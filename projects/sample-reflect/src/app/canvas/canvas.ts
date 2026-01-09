@@ -44,6 +44,13 @@ export class Canvas {
   private hashDirty = false;    // track pending changes while suppressed
   private wheelFlushHandle: number | null = null; // debounce wheel flush
   private ephemeralTokens = new Map<string, string>(); // in-memory fallback for tokens
+  
+  // Default dimensions for new URL objects
+  private readonly defaultIframeWidth = 600;
+  private readonly defaultIframeHeight = 400;
+  private readonly defaultViewportWidth = 1920;
+  private readonly defaultViewportHeight = 1080;
+  
   // 1x1 transparent PNG to keep image objects alive when content can't resolve yet
   private readonly transparentPixel =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/hsrLxkAAAAASUVORK5CYII=';
@@ -215,20 +222,21 @@ export class Canvas {
 
   private addUrlObject(url: string): void {
     // Add URL as an iframe object centered on the canvas
-    const centerX = 960 - 300; // viewport center - half of iframe width
-    const centerY = 540 - 200; // viewport center - half of iframe height
+    const centerX = this.defaultViewportWidth / 2 - this.defaultIframeWidth / 2;
+    const centerY = this.defaultViewportHeight / 2 - this.defaultIframeHeight / 2;
+    const aspectRatio = this.defaultIframeHeight / this.defaultIframeWidth;
     
     const newObject: CanvasObject = {
       id: this.generateId(),
       type: 'iframe',
       x: centerX / this.zoom(),
       y: centerY / this.zoom(),
-      width: 600,
-      height: 400,
+      width: this.defaultIframeWidth,
+      height: this.defaultIframeHeight,
       rotation: 0,
       content: url,
       sourceRef: url,
-      originalAspectRatio: 400 / 600,
+      originalAspectRatio: aspectRatio,
       safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
       displayMode: 'image', // Default to image view (og:image preview)
     };

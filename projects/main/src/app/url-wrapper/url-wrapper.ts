@@ -38,8 +38,8 @@ export class UrlWrapper {
     try {
       sessionStorage.setItem(urlKey, currentUrl);
       console.log('[URL Wrapper] Stored URL with key:', urlKey, 'URL:', currentUrl);
-    } catch {
-      console.error('Failed to store URL in sessionStorage');
+    } catch (error) {
+      console.error('Failed to store URL in sessionStorage:', error);
       return;
     }
 
