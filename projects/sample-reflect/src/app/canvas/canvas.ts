@@ -91,6 +91,10 @@ export class Canvas {
   protected showUrlModal = signal(false);
   protected urlInputValue = signal('');
   
+  // URL wrapper navigation
+  protected cameFromUrlWrapper = signal(false);
+  protected urlWrapperUrl = signal<string | null>(null);
+  
   // Iframe interaction state
   protected hoveredIframeId = signal<string | null>(null);
   protected interactiveIframeId = signal<string | null>(null);
@@ -223,6 +227,10 @@ export class Canvas {
           if (loadUrlKey) {
             const urlToLoad = sessionStorage.getItem(loadUrlKey);
             if (urlToLoad) {
+              // Mark that we came from URL wrapper
+              this.cameFromUrlWrapper.set(true);
+              this.urlWrapperUrl.set(urlToLoad);
+              
               // Clean up the stored URL
               sessionStorage.removeItem(loadUrlKey);
               // Add the URL as an object on the canvas
@@ -271,6 +279,19 @@ export class Canvas {
 
     // Fetch og:image metadata in the background
     this.fetchOgImage(url, newObject.id);
+  }
+
+  protected returnToUrlWrapper(): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    
+    const originalUrl = this.urlWrapperUrl();
+    if (originalUrl) {
+      // Navigate back to URL wrapper with the original URL
+      window.location.href = `/?url=${encodeURIComponent(originalUrl)}`;
+    } else {
+      // Fallback to main page
+      window.location.href = '/';
+    }
   }
 
   private onHashChange = (): void => {
