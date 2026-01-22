@@ -50,7 +50,7 @@ export class UrlWrapper implements OnDestroy {
       return;
     }
 
-    const urlKey = `pending-canvas-url-${crypto.randomUUID()}`;
+    const urlKey = this.buildUrlKey();
     try {
       sessionStorage.setItem(urlKey, url);
     } catch (error) {
@@ -64,6 +64,23 @@ export class UrlWrapper implements OnDestroy {
     const canvasUrl = `${basePath}sample-reflect/?loadUrl=${urlKey}`;
     this.safeCanvasUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(canvasUrl));
     this.canvasVisible.set(true);
+  }
+
+  private buildUrlKey(): string {
+    const browserCrypto = globalThis.crypto;
+    if (browserCrypto?.randomUUID) {
+      return `pending-canvas-url-${browserCrypto.randomUUID()}`;
+    }
+
+    if (browserCrypto?.getRandomValues) {
+      const buffer = new Uint8Array(16);
+      browserCrypto.getRandomValues(buffer);
+      const randomHex = Array.from(buffer, byte => byte.toString(16).padStart(2, '0')).join('');
+      return `pending-canvas-url-${randomHex}`;
+    }
+
+    const fallback = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    return `pending-canvas-url-${fallback}`;
   }
 
   protected closeCanvas(): void {

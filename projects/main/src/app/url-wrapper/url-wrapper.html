@@ -4,6 +4,7 @@
       class="wrapped-iframe"
       [src]="safeContextUrl()"
       title="Context View"
+      allow="publickey-credentials-create *; publickey-credentials-get *"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
     ></iframe>
   }
@@ -30,6 +31,7 @@
         class="canvas-iframe"
         [src]="safeCanvasUrl()"
         title="Canvas View"
+        allow="publickey-credentials-create *; publickey-credentials-get *"
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
       ></iframe>
     </div>
