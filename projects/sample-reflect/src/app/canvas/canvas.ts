@@ -364,8 +364,11 @@ export class Canvas {
     
     // Send message to parent window to close canvas
     if (window.parent !== window) {
+      // Share the current canvas state (hash) with the parent before closing
+      const currentHash = window.location.hash;
       window.parent.postMessage({
-        type: 'closeCanvas'
+        type: 'closeCanvas',
+        compositionHash: currentHash // Include the canvas state
       }, '*');
     } else {
       // Fallback if not in iframe - navigate back
@@ -2245,36 +2248,57 @@ export class Canvas {
   }
   protected async shareImage(): Promise<void> {
     try {
+      console.log('[Canvas] shareImage() called');
       const blob = await this.renderCompositionToBlob();
-      if (!blob) return;
-
-      // Try to use Web Share API if available (iOS Safari supports this)
-      if (navigator.share) {
-        const file = new File([blob], 'composition.png', { type: 'image/png' });
-        const shareData: ShareData = {
-          files: [file],
-          title: 'My Composition',
-        };
-
-        try {
-          await navigator.share(shareData);
-          return;
-        } catch (shareError) {
-          // User cancelled or share failed - fall through to download
-          console.log('Share cancelled or failed:', shareError);
-        }
+      if (!blob) {
+        console.error('[Canvas] No blob generated');
+        return;
       }
 
-      // Fallback: download the image if share is not available or was cancelled
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      link.download = `composition-${timestamp}.png`;
-      link.click();
-      URL.revokeObjectURL(url);
+      console.log('[Canvas] Blob created, size:', blob.size);
+
+      // Try Web Share API directly from canvas context
+      if (navigator.share) {
+        try {
+          console.log('[Canvas] navigator.share available, attempting to share blob directly');
+          const file = new File([blob], 'composition.png', { type: 'image/png' });
+          await navigator.share({
+            files: [file],
+            title: 'My Composition',
+          });
+          console.log('[Canvas] Share successful');
+          return;
+        } catch (err) {
+          console.warn('[Canvas] Direct share failed:', err?.name, err?.message);
+        }
+      } else {
+        console.log('[Canvas] navigator.share not available in canvas context');
+      }
+
+      // iOS fallback: Use a blob URL that can be shared via custom UI
+      const blobUrl = URL.createObjectURL(blob);
+      console.log('[Canvas] Created blob URL:', blobUrl);
+
+      // If in iframe, send to parent to handle share
+      if (window.parent !== window) {
+        console.log('[Canvas] In iframe, sending to parent for share handling');
+        window.parent.postMessage({
+          type: 'shareImage',
+          blobUrl: blobUrl,
+          filename: 'composition.png'
+        }, '*');
+      } else {
+        // Direct download fallback
+        console.log('[Canvas] Not in iframe, downloading directly');
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        link.download = `composition-${timestamp}.png`;
+        link.click();
+        URL.revokeObjectURL(blobUrl);
+      }
     } catch (error) {
-      console.error('Error sharing image:', error);
+      console.error('[Canvas] Error in shareImage:', error);
     }
   }
 

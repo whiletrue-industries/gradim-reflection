@@ -20,6 +20,7 @@ export class UrlWrapper implements OnDestroy {
   protected canvasVisible = signal(false);
   protected safeCanvasUrl = signal<SafeResourceUrl | null>(null);
   protected isClosing = signal(false);
+  protected savedComposition = signal<string | null>(null);
 
   constructor() {
     const randomUrl = getRandomGradimUrl();
@@ -39,22 +40,76 @@ export class UrlWrapper implements OnDestroy {
 
   private handleMessage = (event: MessageEvent): void => {
     if (event.data?.type === 'closeCanvas') {
+      // If canvas sent back a composition state, save it
+      if (event.data.compositionHash) {
+        try {
+          // Store just the hash part (e.g., #data-...)
+          this.savedComposition.set(event.data.compositionHash);
+          sessionStorage.setItem('canvasComposition', event.data.compositionHash);
+        } catch (error) {
+          console.error('Failed to store composition state:', error);
+        }
+      }
       this.closeCanvas();
+    } else if (event.data?.type === 'shareImage') {
+      // Handle share image from canvas - do this immediately while we're in a user gesture context
+      console.log('[UrlWrapper] Received shareImage message, handling immediately');
+      this.handleShareImageImmediately(event.data.blobUrl, event.data.filename);
     }
   };
 
+  private handleShareImageImmediately(blobUrl: string, filename: string): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+
+    console.log('[UrlWrapper] handleShareImageImmediately called');
+    console.log('[UrlWrapper] navigator.share available:', !!navigator.share);
+    
+    // Try navigator.share first
+    if (navigator.share) {
+      console.log('[UrlWrapper] Attempting navigator.share with blob URL');
+      
+      fetch(blobUrl)
+        .then(res => res.blob())
+        .then(blob => {
+          console.log('[UrlWrapper] Blob fetched, sharing');
+          const file = new File([blob], filename, { type: 'image/png' });
+          return navigator.share({
+            files: [file],
+            title: 'My Composition',
+          });
+        })
+        .then(() => {
+          console.log('[UrlWrapper] Share completed');
+          URL.revokeObjectURL(blobUrl);
+        })
+        .catch(err => {
+          console.error('[UrlWrapper] Share error:', err?.message);
+          URL.revokeObjectURL(blobUrl);
+        });
+    } else {
+      console.log('[UrlWrapper] navigator.share not available on this platform');
+      console.log('[UrlWrapper] On iOS Safari, try long-pressing the image in the canvas and selecting "Save Image"');
+      URL.revokeObjectURL(blobUrl);
+    }
+  }
+
   protected shareToCanvas(): void {
+    console.log('[UrlWrapper] shareToCanvas clicked');
     this.isClosing.set(false);
     const url = this.currentUrl();
     if (!url) {
+      console.warn('[UrlWrapper] No URL to share');
       return;
     }
 
     const urlKey = this.buildUrlKey();
+    console.log('[UrlWrapper] Generated URL key:', urlKey);
+    
     try {
       sessionStorage.setItem(urlKey, url);
+      console.log('[UrlWrapper] Stored URL in sessionStorage');
     } catch (error) {
-      console.error('Failed to store URL in sessionStorage:', error);
+      console.error('[UrlWrapper] Failed to store URL in sessionStorage:', error);
       return;
     }
 
@@ -62,8 +117,11 @@ export class UrlWrapper implements OnDestroy {
     // Get the base path (e.g., '/gradim-reflection/' on GitHub Pages)
     const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
     const canvasUrl = `${basePath}sample-reflect/?loadUrl=${urlKey}`;
+    console.log('[UrlWrapper] Opening canvas with URL:', canvasUrl);
+    
     this.safeCanvasUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(canvasUrl));
     this.canvasVisible.set(true);
+    console.log('[UrlWrapper] Canvas opened, canvasVisible:', this.canvasVisible());
   }
 
   private buildUrlKey(): string {
@@ -93,5 +151,18 @@ export class UrlWrapper implements OnDestroy {
       this.safeCanvasUrl.set(null);
       this.isClosing.set(false);
     }, 240);
+  }
+
+  protected viewSavedComposition(): void {
+    const composition = this.savedComposition();
+    if (!composition) {
+      return;
+    }
+
+    this.isClosing.set(false);
+    const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+    const canvasUrl = `${basePath}sample-reflect/${composition}`;
+    this.safeCanvasUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(canvasUrl));
+    this.canvasVisible.set(true);
   }
 }

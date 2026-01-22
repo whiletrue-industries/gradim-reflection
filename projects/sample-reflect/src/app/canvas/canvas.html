@@ -183,9 +183,21 @@
     <button class="download-button" (click)="downloadImage()" [disabled]="objects().length === 0">
       Download
     </button>
-    <button class="share-button" (click)="shareImage()" [disabled]="objects().length === 0">
-      Share
-    </button>
+    <div class="share-menu-container">
+      <button class="share-button" (click)="shareMenuOpen.set(!shareMenuOpen())" [disabled]="objects().length === 0">
+        Share
+      </button>
+      @if (shareMenuOpen()) {
+        <div class="share-menu" role="menu">
+          <button type="button" (click)="shareImage(); shareMenuOpen.set(false)" class="share-menu-item">
+            <span>Share Image</span>
+          </button>
+          <button type="button" (click)="shareComposition(); shareMenuOpen.set(false)" class="share-menu-item">
+            <span>Share Link</span>
+          </button>
+        </div>
+      }
+    </div>
   </div>
 
   <!-- Mobile-only floating add button with menu -->

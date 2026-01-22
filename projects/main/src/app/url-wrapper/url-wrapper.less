@@ -1,8 +1,8 @@
 .url-wrapper-container {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: #000;
 }
@@ -19,10 +19,19 @@
 
 .share-button-container {
   position: fixed;
-  bottom: 20px;
-  left: 20px;
+  top: 20px;
+  right: 20px;
   z-index: 200;
   pointer-events: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .share-button {
@@ -39,6 +48,9 @@
   cursor: pointer;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
   transition: all 0.2s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 
   &:hover {
     background-color: rgba(30, 30, 30, 0.98);
@@ -61,13 +73,23 @@
   &.close {
     background-color: rgba(30, 30, 30, 0.95);
   }
+
+  &.saved {
+    background-color: rgba(40, 120, 80, 0.9);
+    border-color: rgba(100, 200, 150, 0.3);
+    
+    &:hover {
+      background-color: rgba(50, 140, 100, 0.98);
+      border-color: rgba(150, 255, 200, 0.4);
+    }
+  }
 }
 
 .canvas-overlay {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   z-index: 10;
   background: rgba(0, 0, 0, 0.05);
   overflow: hidden;
