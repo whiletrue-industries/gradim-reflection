@@ -533,7 +533,7 @@ export class Canvas {
         this.shareToInstagram(currentUrl);
         break;
       case 'upload':
-        this.shareToWeb(currentUrl);
+        this.shareImage();
         break;
       case 'download':
         this.downloadImage();

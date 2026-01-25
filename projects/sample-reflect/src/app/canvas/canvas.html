@@ -23,8 +23,8 @@
           <!-- Empty polaroid frame button with image upload -->
           <div 
             class="empty-frame-button"
-            (click)="fileInput.click()"
-            (touchstart)="fileInput.click()"
+            (click)="fileInput.click(); $event.stopPropagation()"
+            (touchstart)="fileInput.click(); $event.stopPropagation()"
           >
             <div class="plus-icon-center">+</div>
             <input 
