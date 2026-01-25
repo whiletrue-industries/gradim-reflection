@@ -783,14 +783,16 @@ export class Canvas {
         )
       );
       this.scheduleHashUpdate();
-      // After image dimensions are known, mark that we need to fit once the image loads in DOM
-      // Cancel any pending fallback to avoid double-fitting
+      // After image dimensions are known, cancel any pending fallback to avoid double-fitting
       if (this.pendingInitialFitTimeout !== null) {
         window.clearTimeout(this.pendingInitialFitTimeout);
         this.pendingInitialFitTimeout = null;
       }
-      // Set flag to trigger fit when the actual img element loads
-      this.pendingFitAfterImageLoad = true;
+      // Trigger fit now that dimensions are known (works reliably across all browsers)
+      if (this.pendingFitAfterImageLoad) {
+        this.pendingFitAfterImageLoad = false;
+        this.animateFitToContent();
+      }
     };
     img.onerror = () => {
       // If image fails to load, just set the og:image without resizing
