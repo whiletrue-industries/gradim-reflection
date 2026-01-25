@@ -107,6 +107,9 @@ export class Canvas {
   protected selectedAppIndex = signal(0);
   protected apps = CANVAS_APPS;
   
+  // Shuffle state
+  protected isShuffling = signal(false);
+  
   // Iframe interaction state
   protected hoveredIframeId = signal<string | null>(null);
   protected interactiveIframeId = signal<string | null>(null);
@@ -587,6 +590,70 @@ export class Canvas {
   private shareViaDownload(): void {
     // Call the existing downloadImage method
     this.downloadImage();
+  }
+
+  protected async shuffleImage(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) return;
+    if (this.isShuffling()) return;
+
+    this.isShuffling.set(true);
+    try {
+      // Remove all existing iframe (URL) objects from canvas
+      const objectsToRemove = this.objects().filter(obj => obj.type === 'iframe');
+      objectsToRemove.forEach(obj => {
+        this.cleanupObjectStorage(obj);
+      });
+      
+      // Update objects to remove all iframes
+      this.objects.update(objects => objects.filter(obj => obj.type !== 'iframe'));
+      this.selectedObjectId.set(null);
+
+      // Fetch and add new random URL
+      const randomUrl = await this.fetchRandomGradimUrl();
+      if (randomUrl) {
+        this.addUrlObject(randomUrl);
+        this.urlWrapperUrl.set(randomUrl);
+        try {
+          localStorage.setItem('wall-url', randomUrl);
+        } catch (e) {
+          console.warn('[Canvas] Could not store wall-url', e);
+        }
+      }
+    } catch (error) {
+      console.error('[Canvas] Error shuffling image:', error);
+    } finally {
+      this.isShuffling.set(false);
+    }
+  }
+
+  private async fetchRandomGradimUrl(): Promise<string | null> {
+    const WALL_BASE_URL = 'https://gradim-wall.netlify.app';
+    const RANDOM_API_LEAN_URL = 'https://gradim.fh-potsdam.de/omeka-s/api/items?per_page=1&sort_by=random&fields[]=dcterms:identifier';
+    const RANDOM_API_URL = 'https://gradim.fh-potsdam.de/omeka-s/api/items?per_page=1&sort_by=random';
+
+    try {
+      const identifier = await this.fetchIdentifierFromUrl(RANDOM_API_LEAN_URL) ?? 
+                        await this.fetchIdentifierFromUrl(RANDOM_API_URL);
+      if (!identifier) return null;
+      return `${WALL_BASE_URL}/${identifier}`;
+    } catch {
+      return null;
+    }
+  }
+
+  private async fetchIdentifierFromUrl(url: string): Promise<string | null> {
+    try {
+      const response = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!response.ok) return null;
+
+      const payload = await response.json();
+      if (!Array.isArray(payload) || payload.length === 0) return null;
+
+      const identifier = payload[0]?.['dcterms:identifier']?.[0]?.['@value'];
+      return typeof identifier === 'string' ? identifier : null;
+    } catch {
+      return null;
+    }
   }
 
   private computeBasePath(): string {
