@@ -1798,6 +1798,14 @@ export class Canvas {
     }
   }
 
+  protected onUserImageLoad(event: Event, objectId: string): void {
+    // Called when a user-uploaded image has loaded
+    // Animate to fit all layers
+    runInInjectionContext(this.injector, () => {
+      afterNextRender(() => this.animateFitToContent(true));
+    });
+  }
+
   protected onIframeLoad(event: Event, objectId: string): void {
     const iframe = event.target as HTMLIFrameElement | null;
     if (!iframe) return;

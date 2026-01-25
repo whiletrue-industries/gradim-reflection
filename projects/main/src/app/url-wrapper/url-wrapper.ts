@@ -38,8 +38,10 @@ export class UrlWrapper {
     const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
     let target: URL;
     if (isLocalHost) {
-      // On localhost, use same port with /sample-reflect/ proxy route
-      target = new URL('/sample-reflect/', window.location.href);
+      // On localhost dev, navigate directly to canvas app on its own port
+      // Use port 4201 (sample-reflect default) or detect from environment
+      const canvasPort = '4201';
+      target = new URL(`http://${hostname}:${canvasPort}/`);
     } else {
       // In production, route to sample-reflect/ relative path
       target = new URL('sample-reflect/', window.location.href);
