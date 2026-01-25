@@ -1492,35 +1492,27 @@ export class Canvas {
     let xOffset = 0;
     let yOffset = 0;
     
-    // Corner handles - scale both dimensions
+    // Corner handles - scale proportionally (maintain aspect ratio)
     if (handle === 'scale-nw') {
       const scaleDelta = (-dx - dy) / 2;
       newWidth = Math.max(50, this.originalObject.width + scaleDelta);
-      newHeight = this.originalObject.type === 'image' 
-        ? newWidth * this.originalObject.originalAspectRatio
-        : Math.max(50, this.originalObject.height + scaleDelta);
+      newHeight = newWidth * this.originalObject.originalAspectRatio;
       xOffset = this.originalObject.width - newWidth;
       yOffset = this.originalObject.height - newHeight;
     } else if (handle === 'scale-ne') {
       const scaleDelta = (dx - dy) / 2;
       newWidth = Math.max(50, this.originalObject.width + scaleDelta);
-      newHeight = this.originalObject.type === 'image' 
-        ? newWidth * this.originalObject.originalAspectRatio
-        : Math.max(50, this.originalObject.height + scaleDelta);
+      newHeight = newWidth * this.originalObject.originalAspectRatio;
       yOffset = this.originalObject.height - newHeight;
     } else if (handle === 'scale-sw') {
       const scaleDelta = (-dx + dy) / 2;
       newWidth = Math.max(50, this.originalObject.width + scaleDelta);
-      newHeight = this.originalObject.type === 'image' 
-        ? newWidth * this.originalObject.originalAspectRatio
-        : Math.max(50, this.originalObject.height + scaleDelta);
+      newHeight = newWidth * this.originalObject.originalAspectRatio;
       xOffset = this.originalObject.width - newWidth;
     } else if (handle === 'scale-se') {
       const scaleDelta = (dx + dy) / 2;
       newWidth = Math.max(50, this.originalObject.width + scaleDelta);
-      newHeight = this.originalObject.type === 'image' 
-        ? newWidth * this.originalObject.originalAspectRatio
-        : Math.max(50, this.originalObject.height + scaleDelta);
+      newHeight = newWidth * this.originalObject.originalAspectRatio;
     }
     // Edge handles - scale only one dimension
     else if (handle === 'scale-w') {
