@@ -107,6 +107,13 @@ export class Canvas {
   protected selectedAppIndex = signal(0);
   protected apps = CANVAS_APPS;
   
+  // Check if current app has custom/uploaded data
+  protected hasCustomData = computed(() => {
+    return this.objects().some(obj => 
+      obj.type === 'image' && obj.sourceRef?.startsWith('data:')
+    );
+  });
+  
   // Shuffle state
   protected isShuffling = signal(false);
   
@@ -521,16 +528,27 @@ export class Canvas {
     if (!isPlatformBrowser(this.platformId)) return;
 
     const currentUrl = window.location.href;
+    const hasCustom = this.hasCustomData();
 
     switch (method) {
       case 'copy':
-        this.copyToClipboard(currentUrl);
+        if (!hasCustom) {
+          this.copyToClipboard(currentUrl);
+        }
         break;
       case 'whatsapp':
-        this.shareToWhatsApp(currentUrl);
+        if (hasCustom) {
+          this.shareImage();
+        } else {
+          this.shareToWhatsApp(currentUrl);
+        }
         break;
       case 'instagram':
-        this.shareToInstagram(currentUrl);
+        if (hasCustom) {
+          this.shareImage();
+        } else {
+          this.shareToInstagram(currentUrl);
+        }
         break;
       case 'upload':
         this.shareImage();

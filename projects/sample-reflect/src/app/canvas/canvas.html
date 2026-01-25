@@ -244,6 +244,7 @@
   <div class="share-menu">
     <button 
       class="share-button copy" 
+      [disabled]="hasCustomData()"
       (click)="shareVia('copy')" 
       title="Copy link"
     >
