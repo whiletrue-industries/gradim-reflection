@@ -32,45 +32,10 @@ export class UrlWrapper {
       return;
     }
 
-    const urlKey = this.buildUrlKey();
-    console.log('[UrlWrapper] Generated URL key:', urlKey);
-    
-    try {
-      localStorage.setItem(urlKey, url);
-      console.log('[UrlWrapper] Stored URL in localStorage');
-    } catch (error) {
-      console.error('[UrlWrapper] Failed to store URL in localStorage:', error);
-      return;
-    }
-
-    try {
-      localStorage.setItem('wall-url', url);
-    } catch (error) {
-      console.warn('[UrlWrapper] Could not store wall-url', error);
-    }
-
-    // Use window.location.href since main and sample-reflect are separate apps
     const basePath = this.getBasePath();
-    const canvasUrl = `${basePath}sample-reflect/?loadUrl=${urlKey}`;
-    console.log('[UrlWrapper] Navigating to canvas:', canvasUrl);
+    const canvasUrl = `${basePath}sample-reflect/?shareUrl=${encodeURIComponent(url)}`;
+    console.log('[UrlWrapper] Navigating to canvas with shareUrl:', canvasUrl);
     window.location.href = canvasUrl;
-  }
-
-  private buildUrlKey(): string {
-    const browserCrypto = globalThis.crypto;
-    if (browserCrypto?.randomUUID) {
-      return `pending-canvas-url-${browserCrypto.randomUUID()}`;
-    }
-
-    if (browserCrypto?.getRandomValues) {
-      const buffer = new Uint8Array(16);
-      browserCrypto.getRandomValues(buffer);
-      const randomHex = Array.from(buffer, byte => byte.toString(16).padStart(2, '0')).join('');
-      return `pending-canvas-url-${randomHex}`;
-    }
-
-    const fallback = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    return `pending-canvas-url-${fallback}`;
   }
 
   private getBasePath(): string {

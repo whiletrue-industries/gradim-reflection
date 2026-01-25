@@ -236,37 +236,39 @@ export class Canvas {
       afterNextRender(() => {
         this.cleanupOrphanedStorage();
         
-        // Check for loadUrl query parameter (from URL wrapper)
+        // Check for shareUrl query parameter (from URL wrapper)
         try {
           const urlParams = new URLSearchParams(window.location.search);
-          const loadUrlKey = urlParams.get('loadUrl');
-          if (loadUrlKey) {
-            const urlToLoad = localStorage.getItem(loadUrlKey);
-            if (urlToLoad) {
-              // Mark that we came from URL wrapper
-              this.cameFromUrlWrapper.set(true);
-              this.urlWrapperUrl.set(urlToLoad);
-              
-              // Clean up the stored URL - keep it for potential retry
-              // localStorage.removeItem(loadUrlKey);
-              // Add the URL as an object on the canvas
-              this.addUrlObject(urlToLoad);
-              // Defer fitting until og:image is ready; fallback if it never arrives
-              if (this.pendingInitialFitTimeout !== null) {
-                window.clearTimeout(this.pendingInitialFitTimeout);
-              }
-              this.pendingInitialFitTimeout = window.setTimeout(() => {
-                // Fallback fit if og:image wasn't fetched
-                if (this.pendingInitialFitTimeout !== null) {
-                  this.animateFitToContent();
-                  this.pendingInitialFitTimeout = null;
-                }
-              }, 1500);
-              // Clean up the query parameter from the URL
-              urlParams.delete('loadUrl');
-              const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
-              window.history.replaceState(null, '', newUrl);
+          const shareUrl = urlParams.get('shareUrl');
+          if (shareUrl) {
+            // Mark that we came from URL wrapper
+            this.cameFromUrlWrapper.set(true);
+            this.urlWrapperUrl.set(shareUrl);
+            
+            // Store in localStorage for return navigation
+            try {
+              localStorage.setItem('wall-url', shareUrl);
+            } catch (e) {
+              console.warn('[Canvas] Could not store wall-url', e);
             }
+            
+            // Add the URL as an object on the canvas
+            this.addUrlObject(shareUrl);
+            // Defer fitting until og:image is ready; fallback if it never arrives
+            if (this.pendingInitialFitTimeout !== null) {
+              window.clearTimeout(this.pendingInitialFitTimeout);
+            }
+            this.pendingInitialFitTimeout = window.setTimeout(() => {
+              // Fallback fit if og:image wasn't fetched
+              if (this.pendingInitialFitTimeout !== null) {
+                this.animateFitToContent();
+                this.pendingInitialFitTimeout = null;
+              }
+            }, 1500);
+            // Clean up the query parameter from the URL
+            urlParams.delete('shareUrl');
+            const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
+            window.history.replaceState(null, '', newUrl);
           }
         } catch (e) {
           // Silently handle errors in URL loading
