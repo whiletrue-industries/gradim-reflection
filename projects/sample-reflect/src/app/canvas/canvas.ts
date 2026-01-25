@@ -267,8 +267,11 @@ export class Canvas {
               console.warn('[Canvas] Could not store wall-url', e);
             }
             
-            // Add the URL as an object on the canvas
-            this.addUrlObject(shareUrl);
+            // Add the URL as an object on the canvas unless already present via hash
+            const alreadyExists = this.objects().some(o => o.sourceRef === shareUrl);
+            if (!alreadyExists) {
+              this.addUrlObject(shareUrl);
+            }
             // Defer fitting until og:image is ready; fallback if it never arrives
             if (this.pendingInitialFitTimeout !== null) {
               window.clearTimeout(this.pendingInitialFitTimeout);
@@ -1994,7 +1997,7 @@ export class Canvas {
     try {
       sessionStorage.setItem('canvasLastHash', this.lastSerializedHash);
     } catch {}
-    if (!this.restoredFromHash && nextObjects.length > 0) {
+    if (nextObjects.length > 0) {
       this.fitOnceAfterLoad();
     }
     
