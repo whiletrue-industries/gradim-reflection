@@ -207,19 +207,15 @@ export class Canvas {
       try {
         const currentUrlHash = window.location.hash;
         const storedHash = sessionStorage.getItem('canvasLastHash');
-        
-        // Debug logging for production troubleshooting
-        console.log('[Canvas Init] Current URL hash:', currentUrlHash?.substring(0, 100));
-        console.log('[Canvas Init] Stored hash:', storedHash?.substring(0, 100));
-        console.log('[Canvas Init] Full URL:', window.location.href);
+        const hasShareUrlParam = window.location.search.includes('shareUrl=');
         
         // If URL hash is explicitly empty but sessionStorage has a value,
-        // the user deliberately cleared it → respect that by clearing storage and skipping restore
-        if ((!currentUrlHash || currentUrlHash === '#') && storedHash) {
+        // check if this is intentional (user cleared) or temporary (shareUrl will write hash soon)
+        if ((!currentUrlHash || currentUrlHash === '#') && storedHash && !hasShareUrlParam) {
+          // User deliberately cleared the hash → respect that
           sessionStorage.removeItem('canvasLastHash');
           this.skipNextHashWrite = true;
           hashToRestore = ''; // Don't restore anything
-          console.log('[Canvas Init] Cleared hash (user requested)');
         } else if (storedHash) {
           // Use the properly encoded version from sessionStorage
           hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
@@ -228,15 +224,12 @@ export class Canvas {
           if (hashToRestore !== currentUrlHash) {
             window.history.replaceState(null, '', hashToRestore);
           }
-          console.log('[Canvas Init] Using stored hash');
         } else if (currentUrlHash) {
           // No stored hash, but URL has one → use it
           hashToRestore = currentUrlHash;
-          console.log('[Canvas Init] Using URL hash');
         }
       } catch (e) {
         hashToRestore = window.location.hash;
-        console.error('[Canvas Init] Error reading hash:', e);
       }
       
       // Suppress hash writes during initial state restoration
@@ -1882,10 +1875,7 @@ export class Canvas {
     if (!isPlatformBrowser(this.platformId)) return;
     if (!hash || hash.length <= 1) return;
 
-    console.log('[Canvas] applyHashState called with:', hash.substring(0, 150));
-
     const segments = hash.substring(1).split('#').filter(Boolean);
-    console.log('[Canvas] Split into', segments.length, 'segments');
     if (segments.length === 0) return;
 
     const nextObjects: CanvasObject[] = [];
