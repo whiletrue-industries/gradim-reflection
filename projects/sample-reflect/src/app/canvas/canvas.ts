@@ -1,6 +1,8 @@
-import { Component, signal, computed, ChangeDetectionStrategy, inject, PLATFORM_ID, effect, afterNextRender } from '@angular/core';
+import { Component, signal, computed, ChangeDetectionStrategy, inject, PLATFORM_ID, effect, afterNextRender, Injector, runInInjectionContext } from '@angular/core';
 import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { CanvasCarousel } from './canvas-carousel';
+import { CANVAS_APPS } from './canvas-apps';
 
 interface CanvasObject {
   id: string;
@@ -16,6 +18,7 @@ interface CanvasObject {
   safeUrl?: SafeResourceUrl; // Sanitized URL for iframes
   ogImage?: string | null; // og:image URL for iframe objects
   displayMode?: 'iframe' | 'image'; // Current display mode for iframe objects with og:image
+  isEmptyFrame?: boolean; // Flag for empty polaroid frames
 }
 
 interface TransformHandle {
@@ -25,7 +28,7 @@ interface TransformHandle {
 
 @Component({
   selector: 'app-canvas',
-  imports: [CommonModule],
+  imports: [CommonModule, CanvasCarousel],
   templateUrl: './canvas.html',
   styleUrl: './canvas.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,6 +36,7 @@ interface TransformHandle {
 export class Canvas {
   private platformId = inject(PLATFORM_ID);
   private sanitizer = inject(DomSanitizer);
+  private injector = inject(Injector);
 
   private readonly baseSize = 200;
   private readonly dataTokenPrefix = 'data-token-';
@@ -97,6 +101,10 @@ export class Canvas {
   // URL wrapper navigation
   protected cameFromUrlWrapper = signal(false);
   protected urlWrapperUrl = signal<string | null>(null);
+  
+  // Canvas apps (gallery mode)
+  protected selectedAppIndex = signal(0);
+  protected apps = CANVAS_APPS;
   
   // Iframe interaction state
   protected hoveredIframeId = signal<string | null>(null);
@@ -200,37 +208,20 @@ export class Canvas {
         this.updateGridScale(currentZoom);
       });
       
-      // Now restore hash from sessionStorage before Angular routing might clear it
-      // Note: window.location.hash is automatically decoded by the browser, which breaks
-      // our parsing (URLs contain '/' which conflicts with our segment delimiter).
-      // Always prefer sessionStorage which has the properly encoded version.
+      // Always start fresh - do not restore from sessionStorage
+      // But DO restore from the URL hash if present
       let hashToRestore = '';
       
       try {
-        const currentUrlHash = window.location.hash;
-        const storedHash = sessionStorage.getItem('canvasLastHash');
-        const hasShareUrlParam = window.location.search.includes('shareUrl=');
+        // Clear stored state to prevent persistence between refreshes
+        sessionStorage.removeItem('canvasLastHash');
         
-        // Priority: URL hash > stored hash > empty
-        // Always prefer URL hash if present (user explicitly navigated to this URL)
-        if (currentUrlHash && currentUrlHash !== '#') {
-          // Use URL hash directly
-          hashToRestore = currentUrlHash;
-        } else if (storedHash && !hasShareUrlParam) {
-          // No URL hash, but we have stored hash
-          // Only use it if shareUrl param is absent (otherwise we're about to write a new hash)
-          hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
-          
-          // Update window.location to use the properly encoded version
-          window.history.replaceState(null, '', hashToRestore);
-        } else if (!storedHash && (!currentUrlHash || currentUrlHash === '#') && !hasShareUrlParam) {
-          // User deliberately cleared the hash (no URL hash, no stored hash, no shareUrl)
-          sessionStorage.removeItem('canvasLastHash');
-          this.skipNextHashWrite = true;
-          hashToRestore = ''; // Don't restore anything
+        // Check if there's a hash in the URL to restore
+        if (window.location.hash) {
+          hashToRestore = window.location.hash;
         }
       } catch (e) {
-        hashToRestore = window.location.hash;
+        // Silently handle errors
       }
       
       // Suppress hash writes during initial state restoration
@@ -295,6 +286,72 @@ export class Canvas {
     }
   }
 
+  protected onAppChange(appIndex: number): void {
+    this.selectedAppIndex.set(appIndex);
+    const app = this.apps[appIndex];
+    if (!app) return;
+
+    // Handle different app behaviors
+    switch (app.id) {
+      case 'centered': {
+        // App 1: Center the loaded image
+        this.animateFitToContent();
+        break;
+      }
+      case 'frame': {
+        // App 2: Place an empty frame next to the image
+        const objects = this.objects();
+        // Only create empty frame if there are no objects at all, or no empty frames exist
+        // This prevents recreating frames when restoring from hash
+        if (objects.length === 0 || !objects.some(o => o.isEmptyFrame)) {
+          const hasAnyImages = objects.some(o => o.type === 'image' && !o.isEmptyFrame);
+          // Only auto-create empty frame if we have actual images
+          if (hasAnyImages || objects.length === 0) {
+            this.createEmptyFrame();
+          }
+        }
+        // Fit all content after frame is set, with animation
+        // Use runInInjectionContext to call afterNextRender outside constructor
+        runInInjectionContext(this.injector, () => {
+          afterNextRender(() => this.animateFitToContent());
+        });
+        break;
+      }
+      // Additional apps can be added here
+    }
+  }
+
+  private createEmptyFrame(): void {
+    // Create a new empty frame object next to existing objects
+    const firstObject = this.objects()[0];
+    if (!firstObject) return;
+
+    const spacing = 50;
+    const frameWidth = 300;
+    const frameHeight = 533; // Portrait smartphone aspect ratio (9:16)
+    
+    const newX = firstObject.x + firstObject.width + spacing;
+    const newY = firstObject.y;
+
+    const newFrame: CanvasObject = {
+      id: this.generateId(),
+      type: 'image', // Use 'image' type instead of 'iframe' for custom rendering
+      x: newX,
+      y: newY,
+      width: frameWidth,
+      height: frameHeight,
+      rotation: 0,
+      content: 'frame-placeholder', // Placeholder marker
+      sourceRef: 'frame-empty',
+      originalAspectRatio: frameHeight / frameWidth,
+      displayMode: 'image',
+      isEmptyFrame: true, // Mark as empty polaroid frame
+    };
+
+    this.addObject(newFrame);
+    this.selectedObjectId.set(newFrame.id);
+  }
+
   private addUrlObject(url: string): void {
     // Add URL as an iframe object centered on the canvas
     const centerX = this.defaultViewportWidth / 2 - this.defaultIframeWidth / 2;
@@ -330,6 +387,35 @@ export class Canvas {
 
     // Fetch og:image metadata in the background
     this.fetchOgImage(url, newObject.id);
+  }
+
+  protected onEmptyFrameUpload(event: Event, objectId: string): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl) {
+        // Update the frame object with the image data
+        this.objects.update(objects =>
+          objects.map(obj =>
+            obj.id === objectId
+              ? {
+                  ...obj,
+                  content: dataUrl,
+                  sourceRef: file.name,
+                  displayMode: 'image' as const,
+                  isEmptyFrame: false, // No longer empty
+                  safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(dataUrl),
+                }
+              : obj
+          )
+        );
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   private fitOnceAfterLoad(): void {
@@ -1856,6 +1942,8 @@ export class Canvas {
     const parts: string[] = [];
     parts.push(this.serializeCanvasSegment());
     for (const obj of this.objects()) {
+      // Skip empty frames - they should not be persisted in the hash
+      if (obj.isEmptyFrame) continue;
       parts.push(this.serializeObjectSegment(obj));
     }
     return parts.join('#');

@@ -45,6 +45,12 @@ export class UrlWrapper {
       target = new URL('sample-reflect/', window.location.href);
     }
     target.searchParams.set('shareUrl', wallUrl);
+    
+    // Also update the wallUrl query param so it persists in the hash when navigating back
+    if (!this.getWallUrlFromLocation()) {
+      window.history.replaceState(null, '', `?wallUrl=${encodeURIComponent(wallUrl)}`);
+    }
+    
     window.location.href = target.toString();
   }
 

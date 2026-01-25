@@ -19,11 +19,26 @@
                     (touchstart)="onObjectTouchStart($event, obj.id)"
                >
                     <div class="hover-border" [ngStyle]="getSelectionBorderStyle()"></div>
-        @if (obj.type === 'image') {
+        @if (obj.isEmptyFrame) {
+          <!-- Empty polaroid frame button with image upload -->
+          <div 
+            class="empty-frame-button"
+            (click)="fileInput.click()"
+            (touchstart)="fileInput.click()"
+          >
+            <div class="plus-icon-center">+</div>
+            <input 
+              type="file" 
+              accept="image/*"
+              (change)="onEmptyFrameUpload($event, obj.id)"
+              #fileInput
+              hidden
+            />
+          </div>
+        } @else if (obj.type === 'image') {
           <!-- Use normal src for data/base64 images; NgOptimizedImage is not suitable here -->
           <img [src]="obj.content" alt="Canvas image" class="object-content" />
         } @else if (obj.type === 'iframe') {
-          @if (obj.displayMode === 'image' && obj.ogImage) {
             <!-- Show og:image preview when in image mode -->
             <img [src]="obj.ogImage" alt="URL preview" class="object-content" (load)="onOgImageLoad($event, obj.id)" />
           } @else {
@@ -39,7 +54,7 @@
                 [class.dimmed]="hoveredIframeId() === obj.id"
                 [class.interactive]="interactiveIframeId() === obj.id"
                 [attr.scrolling]="interactiveIframeId() === obj.id ? 'yes' : 'no'"
-                sandbox="allow-scripts allow-same-origin allow-forms"
+                sandbox="allow-scripts allow-forms"
                 (load)="onIframeLoad($event, obj.id)"
               ></iframe>
               @if (hoveredIframeId() === obj.id && interactiveIframeId() !== obj.id) {
@@ -54,7 +69,6 @@
               }
             </div>
           }
-        }
         
         @if (selectedObjectId() === obj.id) {
           <!-- Toggle button for iframe objects with og:image -->
@@ -266,4 +280,10 @@
       </div>
     </div>
   }
+  
+  <!-- Canvas Apps Carousel -->
+  <app-canvas-carousel 
+    [selectedAppIndex]="selectedAppIndex()"
+    (appChanged)="onAppChange($event)"
+  />
 </div>
