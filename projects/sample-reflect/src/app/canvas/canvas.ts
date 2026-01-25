@@ -45,6 +45,7 @@ export class Canvas {
   private suppressHash = false; // suppress hash writes during interactions
   private hashDirty = false;    // track pending changes while suppressed
   private skipNextHashWrite = false; // allow a deliberate empty-hash clear without rewriting it
+  private readyForHashWrites = false; // wait until initial restore completes
   private wheelFlushHandle: number | null = null; // debounce wheel flush
   private ephemeralTokens = new Map<string, string>(); // in-memory fallback for tokens
   
@@ -185,7 +186,11 @@ export class Canvas {
         this.viewportY();
         this.zoom();
         this.objects();
-        this.scheduleHashUpdate();
+        if (this.readyForHashWrites) {
+          this.scheduleHashUpdate();
+        } else {
+          this.hashDirty = true; // mark that a write is pending once ready
+        }
       });
       effect(() => {
         // Update grid scale when zoom changes
@@ -231,6 +236,12 @@ export class Canvas {
         this.applyHashState(hashToRestore);
       }
       this.suppressHash = false;
+
+      // Enable hash writes after initial restore and flush any pending change
+      this.readyForHashWrites = true;
+      if (this.hashDirty) {
+        this.scheduleHashUpdate();
+      }
       
       // Clean up orphaned localStorage entries after initial load
       afterNextRender(() => {
@@ -1798,6 +1809,11 @@ export class Canvas {
       this.hashDirty = false;
       return;
     }
+    // If not yet ready (initial restore), just mark dirty and bail
+    if (!this.readyForHashWrites) {
+      this.hashDirty = true;
+      return;
+    }
     // If we're suppressing writes (during interaction), mark dirty and skip
     if (this.suppressHash) {
       this.hashDirty = true;
@@ -1875,7 +1891,15 @@ export class Canvas {
     let nextZoom = this.zoom();
 
     for (const segment of segments) {
-      const [encodedRef, transformPart, flagsPart] = segment.split('/');
+      // Robustly split from the end so unencoded URLs with '/' still work (Safari copied URLs)
+      const lastSlash = segment.lastIndexOf('/');
+      if (lastSlash < 0) continue;
+      const flagsPart = segment.substring(lastSlash + 1);
+      const preFlags = segment.substring(0, lastSlash);
+      const secondLastSlash = preFlags.lastIndexOf('/');
+      if (secondLastSlash < 0) continue;
+      const transformPart = preFlags.substring(secondLastSlash + 1);
+      const encodedRef = preFlags.substring(0, secondLastSlash);
       if (!encodedRef || !transformPart) continue;
 
       // Deduplicate identical segment entries in the hash to prevent repeated objects
@@ -2177,9 +2201,10 @@ export class Canvas {
       const blob = await this.renderCompositionToBlob();
       if (!blob) return;
 
-      // Try to use Web Share API if available (iOS Safari supports this)
-      if (navigator.share) {
-        console.log('Share API available, creating file...');
+      // Try to use Web Share API if available and capable of file share
+      const canShareFiles = navigator.canShare?.({ files: [new File([], 'probe', { type: 'image/png' })] }) ?? false;
+      if (navigator.share && canShareFiles) {
+        console.log('[Canvas] Share API available & canShare files, creating file...');
         const file = new File([blob], 'composition.png', { type: 'image/png' });
         
         // iOS Safari limitation: when sharing files, can't include url/text
@@ -2188,17 +2213,19 @@ export class Canvas {
           files: [file],
         };
 
-        console.log('Attempting to share with data:', shareData);
+        console.log('[Canvas] Attempting to share with data:', shareData);
         try {
           await navigator.share(shareData);
-          console.log('Share successful');
+          console.log('[Canvas] Share successful');
+          this.shareMenuOpen.set(false);
           return;
         } catch (shareError) {
           // User cancelled or share failed - fall through to download
-          console.error('Share failed with error:', shareError);
+          const errorMsg = shareError instanceof Error ? shareError.message : String(shareError);
+          console.warn('[Canvas] Share failed, falling back:', errorMsg);
         }
       } else {
-        console.log('Share API not available, falling back to download');
+        console.log('[Canvas] Share API not available or cannot share files; falling back to download');
       }
 
       // Fallback: download the image if share is not available or was cancelled
@@ -2209,8 +2236,10 @@ export class Canvas {
       link.download = `composition-${timestamp}.png`;
       link.click();
       URL.revokeObjectURL(url);
+      this.shareMenuOpen.set(false);
     } catch (error) {
       console.error('Error sharing composition:', error);
+      this.shareMenuOpen.set(false);
     }
   }
 
@@ -2260,9 +2289,10 @@ export class Canvas {
       console.log('[Canvas] Blob created, size:', blob.size);
 
       // Try Web Share API directly from canvas context
-      if (navigator.share) {
+      const canShareFiles = navigator.canShare?.({ files: [new File([], 'probe', { type: 'image/png' })] }) ?? false;
+      if (navigator.share && canShareFiles) {
         try {
-          console.log('[Canvas] navigator.share available, attempting to share blob directly');
+          console.log('[Canvas] navigator.share available and canShare files, attempting to share blob directly');
           const file = new File([blob], 'composition.png', { type: 'image/png' });
           await navigator.share({
             files: [file],
@@ -2272,10 +2302,10 @@ export class Canvas {
           return;
         } catch (err) {
           const error = err as Error;
-          console.warn('[Canvas] Direct share failed:', error?.name, error?.message);
+          console.warn('[Canvas] Direct share failed (falling back):', error?.name, error?.message);
         }
       } else {
-        console.log('[Canvas] navigator.share not available in canvas context');
+        console.log('[Canvas] navigator.share not available or cannot share files; falling back');
       }
 
       // iOS fallback: Use a blob URL that can be shared via custom UI
