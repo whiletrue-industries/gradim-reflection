@@ -2041,7 +2041,10 @@ export class Canvas {
     const map = new Map<string, number | string>();
     if (!flags) return map;
     for (const entry of flags.split(',')) {
-      const [k, v] = entry.split(':');
+      const sep = entry.indexOf(':');
+      if (sep <= 0) continue; // no key or no separator
+      const k = entry.substring(0, sep);
+      const v = entry.substring(sep + 1);
       if (!k || v === undefined) continue;
       const num = parseFloat(v);
       map.set(k, Number.isNaN(num) ? v : num);
