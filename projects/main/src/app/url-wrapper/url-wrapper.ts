@@ -28,8 +28,16 @@ export class UrlWrapper {
     const wallUrl = this.getWallUrlFromLocation() ?? this.currentUrl();
     if (!wallUrl) return;
 
-    // Build target based on the current location to avoid hardcoding paths
-    const target = new URL('sample-reflect/', window.location.href);
+    const { protocol, hostname, port } = window.location;
+    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+    let target: URL;
+    if (isLocalHost) {
+      // On localhost, use same port with /sample-reflect/ proxy route
+      target = new URL('/sample-reflect/', window.location.href);
+    } else {
+      // In production, route to sample-reflect/ relative path
+      target = new URL('sample-reflect/', window.location.href);
+    }
     target.searchParams.set('shareUrl', wallUrl);
     window.location.href = target.toString();
   }

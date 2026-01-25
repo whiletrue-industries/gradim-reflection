@@ -3,5 +3,14 @@
     "target": "http://localhost:4000",
     "secure": false,
     "logLevel": "debug"
+  },
+  "/sample-reflect": {
+    "target": "http://localhost:62620",
+    "secure": false,
+    "pathRewrite": {
+      "^/sample-reflect": ""
+    },
+    "changeOrigin": true,
+    "logLevel": "debug"
   }
 }

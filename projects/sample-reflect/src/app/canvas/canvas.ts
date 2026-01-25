@@ -1997,7 +1997,8 @@ export class Canvas {
     try {
       sessionStorage.setItem('canvasLastHash', this.lastSerializedHash);
     } catch {}
-    if (nextObjects.length > 0) {
+    // Only auto-fit if we didn't restore from hash (hash already provides a viewport)
+    if (!this.restoredFromHash && nextObjects.length > 0) {
       this.fitOnceAfterLoad();
     }
     
