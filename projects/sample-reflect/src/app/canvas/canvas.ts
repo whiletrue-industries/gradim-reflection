@@ -1967,6 +1967,10 @@ export class Canvas {
         }
       }
 
+      if (debugCount < 3) {
+        console.log('[HashParse] final object', { type, ref, displayMode, ogImage, content: content?.slice?.(0, 80) });
+      }
+
       nextObjects.push({
         id: this.generateId(),
         type,
