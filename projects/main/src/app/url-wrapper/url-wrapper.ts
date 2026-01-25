@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { PLATFORM_ID } from '@angular/core';
-import { getRandomGradimUrl } from '../gradim-urls';
+import { fetchRandomGradimUrlFromApi, getRandomGradimUrl } from '../gradim-urls';
 
 @Component({
   selector: 'app-url-wrapper',
@@ -14,14 +14,20 @@ import { getRandomGradimUrl } from '../gradim-urls';
 export class UrlWrapper {
   private sanitizer = inject(DomSanitizer);
   private platformId = inject(PLATFORM_ID);
+  private readonly isBrowser = isPlatformBrowser(this.platformId);
 
   protected currentUrl = signal<string>('');
   protected safeContextUrl = signal<SafeResourceUrl | null>(null);
 
   constructor() {
-    const initialUrl = this.getInitialWallUrl();
-    this.currentUrl.set(initialUrl);
-    this.safeContextUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(initialUrl));
+    const wallUrlFromLocation = this.getWallUrlFromLocation();
+    const initialUrl = wallUrlFromLocation ?? getRandomGradimUrl();
+
+    this.setUrl(initialUrl);
+
+    if (this.isBrowser && !wallUrlFromLocation) {
+      this.loadRandomUrlFromApi();
+    }
   }
 
   protected shareToCanvas(): void {
@@ -42,14 +48,8 @@ export class UrlWrapper {
     window.location.href = target.toString();
   }
 
-  private getInitialWallUrl(): string {
-    if (!isPlatformBrowser(this.platformId)) {
-      return getRandomGradimUrl();
-    }
-    return this.getWallUrlFromLocation() ?? getRandomGradimUrl();
-  }
-
   private getWallUrlFromLocation(): string | null {
+    if (!this.isBrowser) return null;
     try {
       const params = new URLSearchParams(window.location.search);
       const fromQuery = params.get('wallUrl');
@@ -57,5 +57,17 @@ export class UrlWrapper {
     } catch {
       return null;
     }
+  }
+
+  private setUrl(url: string): void {
+    if (!url) return;
+    this.currentUrl.set(url);
+    this.safeContextUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(url));
+  }
+
+  private async loadRandomUrlFromApi(): Promise<void> {
+    const apiUrl = await fetchRandomGradimUrlFromApi();
+    if (!apiUrl) return;
+    this.setUrl(apiUrl);
   }
 }

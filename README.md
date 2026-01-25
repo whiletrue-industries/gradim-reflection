@@ -7,6 +7,7 @@ This project enables reflection and composition of Gradim walls.
 - Fixed hash parsing for Safari compatibility
 - Added proportional corner resizing
 - Improved Web Share API support with fallbacks
+- Main app now pulls a random wall URL from the public Omeka API, with static URLs as fallback
 
 ## Development
 
