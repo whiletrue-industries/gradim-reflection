@@ -324,7 +324,9 @@ export class Canvas {
 
     this.addObject(newObject);
 
-    this.fitOnceAfterLoad();
+    // Mark that we should fit once the og:image loads (consistent with refresh behavior)
+    // This avoids a race where fitOnceAfterLoad() fires before DOM is ready
+    this.pendingFitAfterImageLoad = true;
 
     // Fetch og:image metadata in the background
     this.fetchOgImage(url, newObject.id);
