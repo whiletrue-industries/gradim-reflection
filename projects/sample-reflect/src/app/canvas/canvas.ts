@@ -209,24 +209,23 @@ export class Canvas {
         const storedHash = sessionStorage.getItem('canvasLastHash');
         const hasShareUrlParam = window.location.search.includes('shareUrl=');
         
-        // If URL hash is explicitly empty but sessionStorage has a value,
-        // check if this is intentional (user cleared) or temporary (shareUrl will write hash soon)
-        if ((!currentUrlHash || currentUrlHash === '#') && storedHash && !hasShareUrlParam) {
-          // User deliberately cleared the hash → respect that
-          sessionStorage.removeItem('canvasLastHash');
-          this.skipNextHashWrite = true;
-          hashToRestore = ''; // Don't restore anything
-        } else if (storedHash) {
-          // Use the properly encoded version from sessionStorage
+        // Priority: URL hash > stored hash > empty
+        // Always prefer URL hash if present (user explicitly navigated to this URL)
+        if (currentUrlHash && currentUrlHash !== '#') {
+          // Use URL hash directly
+          hashToRestore = currentUrlHash;
+        } else if (storedHash && !hasShareUrlParam) {
+          // No URL hash, but we have stored hash
+          // Only use it if shareUrl param is absent (otherwise we're about to write a new hash)
           hashToRestore = storedHash.startsWith('#') ? storedHash : `#${storedHash}`;
           
           // Update window.location to use the properly encoded version
-          if (hashToRestore !== currentUrlHash) {
-            window.history.replaceState(null, '', hashToRestore);
-          }
-        } else if (currentUrlHash) {
-          // No stored hash, but URL has one → use it
-          hashToRestore = currentUrlHash;
+          window.history.replaceState(null, '', hashToRestore);
+        } else if (!storedHash && (!currentUrlHash || currentUrlHash === '#') && !hasShareUrlParam) {
+          // User deliberately cleared the hash (no URL hash, no stored hash, no shareUrl)
+          sessionStorage.removeItem('canvasLastHash');
+          this.skipNextHashWrite = true;
+          hashToRestore = ''; // Don't restore anything
         }
       } catch (e) {
         hashToRestore = window.location.hash;
