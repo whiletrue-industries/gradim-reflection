@@ -1884,15 +1884,37 @@ export class Canvas {
     let nextZoom = this.zoom();
 
     for (const segment of segments) {
-      // Robustly split from the end so unencoded URLs with '/' still work (Safari copied URLs)
-      const lastSlash = segment.lastIndexOf('/');
-      if (lastSlash < 0) continue;
-      const flagsPart = segment.substring(lastSlash + 1);
-      const preFlags = segment.substring(0, lastSlash);
-      const secondLastSlash = preFlags.lastIndexOf('/');
-      if (secondLastSlash < 0) continue;
-      const transformPart = preFlags.substring(secondLastSlash + 1);
-      const encodedRef = preFlags.substring(0, secondLastSlash);
+      // Find the two delimiter slashes that wrap the numeric transform part.
+      // Transform is always four comma-separated numbers, so we search from the end
+      // for the last pair of slashes that encloses such a numeric block. This is
+      // resilient to extra '/' characters in both the ref (unencoded URLs) and flags
+      // (e.g., og:https://.../image.jpg).
+      const slashIndexes: number[] = [];
+      for (let i = 0; i < segment.length; i++) {
+        if (segment[i] === '/') slashIndexes.push(i);
+      }
+      if (slashIndexes.length < 2) continue;
+
+      let flagsPart = '';
+      let transformPart = '';
+      let encodedRef = '';
+
+      // Walk from the end to find a transform part that looks like numbers
+      for (let i = slashIndexes.length - 2; i >= 0; i--) {
+        const firstSlash = slashIndexes[i];
+        const secondSlash = slashIndexes[i + 1];
+        transformPart = segment.substring(firstSlash + 1, secondSlash);
+        const parts = transformPart.split(',');
+        if (parts.length === 4 && parts.every(p => !Number.isNaN(parseFloat(p)))) {
+          encodedRef = segment.substring(0, firstSlash);
+          flagsPart = segment.substring(secondSlash + 1);
+          break;
+        }
+      }
+
+      if (!encodedRef) {
+        continue; // Could not find a valid numeric transform block
+      }
       if (!encodedRef || !transformPart) continue;
 
       // Deduplicate identical segment entries in the hash to prevent repeated objects
