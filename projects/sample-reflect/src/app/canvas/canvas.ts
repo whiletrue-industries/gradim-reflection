@@ -241,14 +241,14 @@ export class Canvas {
           const urlParams = new URLSearchParams(window.location.search);
           const loadUrlKey = urlParams.get('loadUrl');
           if (loadUrlKey) {
-            const urlToLoad = sessionStorage.getItem(loadUrlKey);
+            const urlToLoad = localStorage.getItem(loadUrlKey);
             if (urlToLoad) {
               // Mark that we came from URL wrapper
               this.cameFromUrlWrapper.set(true);
               this.urlWrapperUrl.set(urlToLoad);
               
-              // Clean up the stored URL
-              sessionStorage.removeItem(loadUrlKey);
+              // Clean up the stored URL - keep it for potential retry
+              // localStorage.removeItem(loadUrlKey);
               // Add the URL as an object on the canvas
               this.addUrlObject(urlToLoad);
               // Defer fitting until og:image is ready; fallback if it never arrives
@@ -362,7 +362,7 @@ export class Canvas {
   protected returnToUrlWrapper(): void {
     if (!isPlatformBrowser(this.platformId)) return;
 
-    const wallUrl = this.urlWrapperUrl() || sessionStorage.getItem('wall-url');
+    const wallUrl = this.urlWrapperUrl() || localStorage.getItem('wall-url');
     const basePath = this.computeBasePath();
 
     if (wallUrl) {

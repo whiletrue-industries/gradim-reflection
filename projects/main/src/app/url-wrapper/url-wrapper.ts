@@ -36,19 +36,20 @@ export class UrlWrapper {
     console.log('[UrlWrapper] Generated URL key:', urlKey);
     
     try {
-      sessionStorage.setItem(urlKey, url);
-      console.log('[UrlWrapper] Stored URL in sessionStorage');
+      localStorage.setItem(urlKey, url);
+      console.log('[UrlWrapper] Stored URL in localStorage');
     } catch (error) {
-      console.error('[UrlWrapper] Failed to store URL in sessionStorage:', error);
+      console.error('[UrlWrapper] Failed to store URL in localStorage:', error);
       return;
     }
 
     try {
-      sessionStorage.setItem('wall-url', url);
+      localStorage.setItem('wall-url', url);
     } catch (error) {
       console.warn('[UrlWrapper] Could not store wall-url', error);
     }
 
+    // Use window.location.href since main and sample-reflect are separate apps
     const basePath = this.getBasePath();
     const canvasUrl = `${basePath}sample-reflect/?loadUrl=${urlKey}`;
     console.log('[UrlWrapper] Navigating to canvas:', canvasUrl);
