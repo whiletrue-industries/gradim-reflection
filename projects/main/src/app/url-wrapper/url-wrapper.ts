@@ -25,38 +25,29 @@ export class UrlWrapper {
   }
 
   protected shareToCanvas(): void {
-    console.log('[UrlWrapper] shareToCanvas clicked');
-    const url = this.currentUrl();
-    if (!url) {
-      console.warn('[UrlWrapper] No URL to share');
-      return;
-    }
+    const wallUrl = this.getWallUrlFromLocation() ?? this.currentUrl();
+    if (!wallUrl) return;
 
-    const basePath = this.getBasePath();
-    const canvasUrl = `${basePath}sample-reflect/?shareUrl=${encodeURIComponent(url)}`;
-    console.log('[UrlWrapper] Navigating to canvas with shareUrl:', canvasUrl);
-    window.location.href = canvasUrl;
-  }
-
-  private getBasePath(): string {
-    const path = window.location.pathname;
-    const lastSlash = path.lastIndexOf('/') + 1;
-    return path.substring(0, lastSlash);
+    // Build target based on the current location to avoid hardcoding paths
+    const target = new URL('sample-reflect/', window.location.href);
+    target.searchParams.set('shareUrl', wallUrl);
+    window.location.href = target.toString();
   }
 
   private getInitialWallUrl(): string {
     if (!isPlatformBrowser(this.platformId)) {
       return getRandomGradimUrl();
     }
+    return this.getWallUrlFromLocation() ?? getRandomGradimUrl();
+  }
 
+  private getWallUrlFromLocation(): string | null {
     try {
       const params = new URLSearchParams(window.location.search);
       const fromQuery = params.get('wallUrl');
-      if (fromQuery) {
-        return fromQuery;
-      }
-    } catch {}
-
-    return getRandomGradimUrl();
+      return fromQuery || null;
+    } catch {
+      return null;
+    }
   }
 }
