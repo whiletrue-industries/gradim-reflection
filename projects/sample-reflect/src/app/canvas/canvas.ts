@@ -46,6 +46,8 @@ export class Canvas {
   private hashDirty = false;    // track pending changes while suppressed
   private skipNextHashWrite = false; // allow a deliberate empty-hash clear without rewriting it
   private readyForHashWrites = false; // wait until initial restore completes
+  private initialFitDone = false; // ensure we only auto-fit once on load
+  private restoredFromHash = false; // track if initial state came from URL hash
   private wheelFlushHandle: number | null = null; // debounce wheel flush
   private ephemeralTokens = new Map<string, string>(); // in-memory fallback for tokens
   
@@ -232,6 +234,7 @@ export class Canvas {
       }
       
       // Suppress hash writes during initial state restoration
+      this.restoredFromHash = !!hashToRestore;
       this.suppressHash = true;
       if (hashToRestore) {
         this.applyHashState(hashToRestore);
@@ -318,8 +321,16 @@ export class Canvas {
 
     this.addObject(newObject);
 
+    this.fitOnceAfterLoad();
+
     // Fetch og:image metadata in the background
     this.fetchOgImage(url, newObject.id);
+  }
+
+  private fitOnceAfterLoad(): void {
+    if (this.initialFitDone) return;
+    this.initialFitDone = true;
+    afterNextRender(() => this.animateFitToContent());
   }
 
   private animateFitToContent(): void {
@@ -1883,7 +1894,6 @@ export class Canvas {
     let nextViewportY = this.viewportY();
     let nextZoom = this.zoom();
 
-    let debugCount = 0;
     for (const segment of segments) {
       // Find the two delimiter slashes that wrap the numeric transform part.
       // Transform is always four comma-separated numbers, so we search from the end
@@ -1914,10 +1924,6 @@ export class Canvas {
       }
 
       if (!encodedRef) {
-        if (debugCount < 3) {
-          console.warn('[HashParse] No transform found for segment', segment.substring(0, 200));
-        }
-        debugCount++;
         continue; // Could not find a valid numeric transform block
       }
       if (!encodedRef || !transformPart) continue;
@@ -1930,9 +1936,6 @@ export class Canvas {
       seenSegments.add(segmentKey);
 
       const ref = decodeURIComponent(encodedRef);
-      if (debugCount < 3) {
-        console.log('[HashParse] ref', ref, 'transform', transformPart, 'flags', flagsPart);
-      }
       if (ref === 'canvas') {
         const [vx, vy, vz] = transformPart.split(',').map(parseFloat);
         if (!Number.isNaN(vx)) nextViewportX = vx;
@@ -1955,20 +1958,12 @@ export class Canvas {
       const height = width * safeRatio;
       let content = this.resolveContent(ref, type);
       if (!content) {
-        if (debugCount < 3) {
-          console.warn('[HashParse] resolveContent failed for type', type, 'ref', ref);
-        }
         // Keep image objects present with a transparent placeholder; skip invalid iframes
         if (type === 'image') {
           content = this.transparentPixel;
         } else {
-          debugCount++;
           continue;
         }
-      }
-
-      if (debugCount < 3) {
-        console.log('[HashParse] final object', { type, ref, displayMode, ogImage, content: content?.slice?.(0, 80) });
       }
 
       nextObjects.push({
@@ -1988,7 +1983,6 @@ export class Canvas {
         ogImage,
         displayMode,
       });
-      debugCount++;
     }
 
     this.viewportX.set(nextViewportX);
@@ -2000,6 +1994,9 @@ export class Canvas {
     try {
       sessionStorage.setItem('canvasLastHash', this.lastSerializedHash);
     } catch {}
+    if (!this.restoredFromHash && nextObjects.length > 0) {
+      this.fitOnceAfterLoad();
+    }
     
     // Refetch og:image for iframe objects missing it
     for (const obj of nextObjects) {
