@@ -1037,3 +1037,87 @@
     right: 12px;
   }
 }
+
+/* Fixed bottom share menu */
+.share-menu-container {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+
+  .share-menu {
+    display: flex;
+    gap: 16px;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 16px 20px;
+    border-radius: 50px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    align-items: center;
+    justify-content: center;
+
+    .share-button {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      padding: 0;
+      flex-shrink: 0;
+
+      svg {
+        width: 28px;
+        height: 28px;
+      }
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.1);
+      }
+
+      &:active {
+        transform: scale(0.95);
+      }
+
+      &.whatsapp {
+        background: rgba(37, 211, 102, 0.2);
+        
+        &:hover {
+          background: rgba(37, 211, 102, 0.3);
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .share-menu-container {
+    bottom: 70px;
+    
+    .share-menu {
+      padding: 12px 16px;
+      gap: 12px;
+
+      .share-button {
+        width: 48px;
+        height: 48px;
+
+        svg {
+          width: 24px;
+          height: 24px;
+        }
+      }
+    }
+  }
+}

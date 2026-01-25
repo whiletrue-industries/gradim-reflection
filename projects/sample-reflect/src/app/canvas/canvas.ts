@@ -514,6 +514,81 @@ export class Canvas {
     }
   }
 
+  protected shareVia(method: string): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+
+    const currentUrl = window.location.href;
+
+    switch (method) {
+      case 'copy':
+        this.copyToClipboard(currentUrl);
+        break;
+      case 'whatsapp':
+        this.shareToWhatsApp(currentUrl);
+        break;
+      case 'instagram':
+        this.shareToInstagram(currentUrl);
+        break;
+      case 'upload':
+        this.shareToWeb(currentUrl);
+        break;
+      case 'download':
+        this.downloadImage();
+        break;
+    }
+  }
+
+  private copyToClipboard(text: string): void {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Link copied to clipboard!');
+    }).catch(() => {
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        alert('Link copied to clipboard!');
+      } catch (err) {
+        console.error('Failed to copy:', err);
+      }
+      document.body.removeChild(textarea);
+    });
+  }
+
+  private shareToWhatsApp(url: string): void {
+    const text = encodeURIComponent('Check out this composition: ' + url);
+    const whatsappUrl = `https://wa.me/?text=${text}`;
+    window.open(whatsappUrl, '_blank');
+  }
+
+  private shareToInstagram(url: string): void {
+    // Instagram doesn't have a direct URL share (for security), so we copy link
+    this.copyToClipboard(url);
+    // Open Instagram in new tab
+    window.open('https://instagram.com', '_blank');
+  }
+
+  private shareToWeb(url: string): void {
+    // Use native Web Share API if available
+    if (navigator.share) {
+      navigator.share({
+        title: 'Canvas Composition',
+        text: 'Check out this composition',
+        url: url,
+      }).catch(err => console.error('Share failed:', err));
+    } else {
+      // Fallback: copy to clipboard
+      this.copyToClipboard(url);
+    }
+  }
+
+  private shareViaDownload(): void {
+    // Call the existing downloadImage method
+    this.downloadImage();
+  }
+
   private computeBasePath(): string {
     const path = window.location.pathname;
     const idx = path.indexOf('/sample-reflect');
