@@ -4,8 +4,11 @@
   "scripts": {
     "ng": "ng",
     "start": "node scripts/start.js",
+    "start:https": "node scripts/start-https.js",
+    "start:https:sample": "node scripts/start-https.js sample-reflect",
     "start:main": "ng serve main --port 4200 --host 0.0.0.0",
     "start:sample": "ng serve sample-reflect --port 4201 --host 0.0.0.0",
+    "certs:generate": "node scripts/generate-cert.js",
     "build": "ng build",
     "build:ssr:main": "ng build main --configuration dev-ssr",
     "build:ssr:sample": "ng build sample-reflect --configuration dev-ssr",

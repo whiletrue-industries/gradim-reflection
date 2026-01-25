@@ -361,24 +361,24 @@ export class Canvas {
 
   protected returnToUrlWrapper(): void {
     if (!isPlatformBrowser(this.platformId)) return;
-    
-    // Send message to parent window to close canvas
-    if (window.parent !== window) {
-      // Share the current canvas state (hash) with the parent before closing
-      const currentHash = window.location.hash;
-      window.parent.postMessage({
-        type: 'closeCanvas',
-        compositionHash: currentHash // Include the canvas state
-      }, '*');
+
+    const wallUrl = this.urlWrapperUrl() || sessionStorage.getItem('wall-url');
+    const basePath = this.computeBasePath();
+
+    if (wallUrl) {
+      window.location.href = `${basePath}?wallUrl=${encodeURIComponent(wallUrl)}`;
     } else {
-      // Fallback if not in iframe - navigate back
-      const originalUrl = this.urlWrapperUrl();
-      if (originalUrl) {
-        window.location.href = `/?url=${encodeURIComponent(originalUrl)}`;
-      } else {
-        window.location.href = '/';
-      }
+      window.location.href = basePath;
     }
+  }
+
+  private computeBasePath(): string {
+    const path = window.location.pathname;
+    const idx = path.indexOf('/sample-reflect');
+    if (idx >= 0) {
+      return path.substring(0, idx + 1);
+    }
+    return '/';
   }
 
   private onHashChange = (): void => {
@@ -2269,7 +2269,8 @@ export class Canvas {
           console.log('[Canvas] Share successful');
           return;
         } catch (err) {
-          console.warn('[Canvas] Direct share failed:', err?.name, err?.message);
+          const error = err as Error;
+          console.warn('[Canvas] Direct share failed:', error?.name, error?.message);
         }
       } else {
         console.log('[Canvas] navigator.share not available in canvas context');

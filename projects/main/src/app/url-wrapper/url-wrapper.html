@@ -10,39 +10,10 @@
   }
 
   <div class="share-button-container">
-    @if (!canvasVisible()) {
-      <div class="button-group">
-        <button class="share-button" type="button" (click)="shareToCanvas()" (touchstart)="shareToCanvas()" title="Share to canvas">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
-          </svg>
-        </button>
-        @if (savedComposition()) {
-          <button class="share-button saved" type="button" (click)="viewSavedComposition()" (touchstart)="viewSavedComposition()" title="View saved composition">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-            </svg>
-          </button>
-        }
-      </div>
-    } @else {
-      <button class="share-button close" type="button" (click)="closeCanvas()" (touchstart)="closeCanvas()" title="Close canvas">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M14.7 5.3a1 1 0 0 1 0 1.4L10.41 11H19a1 1 0 1 1 0 2h-8.59l4.29 4.3a1 1 0 0 1-1.42 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.42 0Z"/>
-        </svg>
-      </button>
-    }
+    <button class="share-button" type="button" (click)="shareToCanvas()" (touchstart)="shareToCanvas()" title="Share to canvas">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+      </svg>
+    </button>
   </div>
-
-  @if (canvasVisible() && safeCanvasUrl()) {
-    <div class="canvas-overlay" [class.slide-in-left]="!isClosing()" [class.slide-out-left]="isClosing()">
-      <iframe 
-        class="canvas-iframe"
-        [src]="safeCanvasUrl()"
-        title="Canvas View"
-        allow="publickey-credentials-create *; publickey-credentials-get *"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
-      ></iframe>
-    </div>
-  }
 </div>
