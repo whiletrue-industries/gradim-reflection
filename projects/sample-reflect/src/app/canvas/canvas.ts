@@ -19,6 +19,7 @@ interface CanvasObject {
   ogImage?: string | null; // og:image URL for iframe objects
   displayMode?: 'iframe' | 'image'; // Current display mode for iframe objects with og:image
   isEmptyFrame?: boolean; // Flag for empty polaroid frames
+  isFrameObject?: boolean; // Any object tied to the frame app (placeholder or uploaded image)
 }
 
 interface TransformHandle {
@@ -291,29 +292,30 @@ export class Canvas {
     const app = this.apps[appIndex];
     if (!app) return;
 
+    // If leaving app 2, remove any temporary empty frames
+    if (app.id !== 'frame') {
+      this.objects.update(objs => objs.filter(o => !o.isFrameObject));
+    }
+
     // Handle different app behaviors
     switch (app.id) {
       case 'centered': {
         // App 1: Center the loaded image
-        this.animateFitToContent();
+        this.animateFitToContent(true);
         break;
       }
       case 'frame': {
         // App 2: Place an empty frame next to the image
         const objects = this.objects();
-        // Only create empty frame if there are no objects at all, or no empty frames exist
-        // This prevents recreating frames when restoring from hash
-        if (objects.length === 0 || !objects.some(o => o.isEmptyFrame)) {
-          const hasAnyImages = objects.some(o => o.type === 'image' && !o.isEmptyFrame);
-          // Only auto-create empty frame if we have actual images
-          if (hasAnyImages || objects.length === 0) {
-            this.createEmptyFrame();
-          }
+        // Create a single empty frame when entering the app if none exists yet
+        // and there is at least one loaded object to pair with.
+        if (objects.length > 0 && !objects.some(o => o.isEmptyFrame)) {
+          this.createEmptyFrame();
         }
         // Fit all content after frame is set, with animation
         // Use runInInjectionContext to call afterNextRender outside constructor
         runInInjectionContext(this.injector, () => {
-          afterNextRender(() => this.animateFitToContent());
+          afterNextRender(() => this.animateFitToContent(true));
         });
         break;
       }
@@ -323,15 +325,18 @@ export class Canvas {
 
   private createEmptyFrame(): void {
     // Create a new empty frame object next to existing objects
-    const firstObject = this.objects()[0];
-    if (!firstObject) return;
+    const base = this.objects().find(o => !o.isFrameObject);
+    if (!base) return;
 
-    const spacing = 50;
-    const frameWidth = 300;
-    const frameHeight = 533; // Portrait smartphone aspect ratio (9:16)
-    
-    const newX = firstObject.x + firstObject.width + spacing;
-    const newY = firstObject.y;
+    // Match base object's size (similar space and proportions)
+    const frameWidth = base.width;
+    const frameHeight = base.height;
+
+    // Allow overlap but not more than ~30% in each axis
+    const offsetX = Math.round(frameWidth * 0.7);
+    const offsetY = Math.round(frameHeight * 0.3);
+    const newX = base.x + offsetX;
+    const newY = base.y + offsetY;
 
     const newFrame: CanvasObject = {
       id: this.generateId(),
@@ -346,6 +351,7 @@ export class Canvas {
       originalAspectRatio: frameHeight / frameWidth,
       displayMode: 'image',
       isEmptyFrame: true, // Mark as empty polaroid frame
+      isFrameObject: true, // App-2-only object
     };
 
     this.addObject(newFrame);
@@ -398,21 +404,42 @@ export class Canvas {
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
       if (dataUrl) {
-        // Update the frame object with the image data
-        this.objects.update(objects =>
-          objects.map(obj =>
-            obj.id === objectId
-              ? {
-                  ...obj,
-                  content: dataUrl,
-                  sourceRef: file.name,
-                  displayMode: 'image' as const,
-                  isEmptyFrame: false, // No longer empty
-                  safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(dataUrl),
-                }
-              : obj
-          )
-        );
+        // Determine uploaded image proportions, size to equivalent area of first layer
+        const img = new Image();
+        img.onload = () => {
+          const naturalW = img.naturalWidth || img.width;
+          const naturalH = img.naturalHeight || img.height;
+          const ratio = naturalH > 0 && naturalW > 0 ? naturalH / naturalW : 1;
+          const base = this.objects().find(o => !o.isFrameObject);
+          const area = base ? base.width * base.height : this.defaultIframeWidth * this.defaultIframeHeight;
+          const newW = Math.round(Math.sqrt(area / (ratio || 1)));
+          const newH = Math.round(Math.sqrt(area * (ratio || 1)));
+
+          this.objects.update(objects =>
+            objects.map(obj =>
+              obj.id === objectId
+                ? {
+                    ...obj,
+                    content: dataUrl,
+                    sourceRef: file.name,
+                    displayMode: 'image' as const,
+                    isEmptyFrame: false,
+                    isFrameObject: true,
+                    width: newW,
+                    height: newH,
+                    originalAspectRatio: ratio || 1,
+                    safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(dataUrl),
+                  }
+                : obj
+            )
+          );
+
+          // After sizing, animate a simple fit (no appear animation)
+          runInInjectionContext(this.injector, () => {
+            afterNextRender(() => this.animateFitToContent(true));
+          });
+        };
+        img.src = dataUrl;
       }
     };
     reader.readAsDataURL(file);
@@ -424,20 +451,19 @@ export class Canvas {
     afterNextRender(() => this.animateFitToContent());
   }
 
-  private animateFitToContent(): void {
+  private animateFitToContent(skipAppear = false): void {
     const targets = this.computeFitToViewTargets();
     
-    // Set initial view position to center-left before animating
-    // This creates a "zoom in from left" effect
-    const bounds = this.calculateCompositionBounds();
-    if (bounds) {
-      const { centerY: vcy } = this.getVisibleViewportMetrics();
-      const contentCenterY = bounds.y + bounds.height / 2;
-      
-      // Position content centered vertically, but far to the left
-      this.zoom.set(targets.zoom * 0.5); // Start at half the target zoom
-      this.viewportX.set(-bounds.width * targets.zoom); // Position off-screen to the left
-      this.viewportY.set(vcy - contentCenterY * targets.zoom * 0.5); // Center vertically at starting zoom
+    if (!skipAppear) {
+      // One-time appear animation: pre-position off-screen-left
+      const bounds = this.calculateCompositionBounds();
+      if (bounds) {
+        const { centerY: vcy } = this.getVisibleViewportMetrics();
+        const contentCenterY = bounds.y + bounds.height / 2;
+        this.zoom.set(targets.zoom * 0.5);
+        this.viewportX.set(-bounds.width * targets.zoom);
+        this.viewportY.set(vcy - contentCenterY * targets.zoom * 0.5);
+      }
     }
     
     this.animateToView(targets.zoom, targets.viewportX, targets.viewportY, 450);
@@ -1767,8 +1793,8 @@ export class Canvas {
     // Called when the og:image in the DOM has fully loaded
     if (this.pendingFitAfterImageLoad) {
       this.pendingFitAfterImageLoad = false;
-      // Image is already loaded and rendered, trigger fit directly
-      this.animateFitToContent();
+      // Image is already loaded and rendered, trigger simple fit (no appear)
+      this.animateFitToContent(true);
     }
   }
 
@@ -1942,6 +1968,8 @@ export class Canvas {
     const parts: string[] = [];
     parts.push(this.serializeCanvasSegment());
     for (const obj of this.objects()) {
+      // Skip frame-app-only objects so app 1/other apps don't restore them
+      if (obj.isFrameObject) continue;
       // Skip empty frames - they should not be persisted in the hash
       if (obj.isEmptyFrame) continue;
       parts.push(this.serializeObjectSegment(obj));

@@ -37,7 +37,7 @@
           </div>
         } @else if (obj.type === 'image') {
           <!-- Use normal src for data/base64 images; NgOptimizedImage is not suitable here -->
-          <img [src]="obj.content" alt="Canvas image" class="object-content" />
+          <img [src]="obj.content" alt="Canvas image" class="object-content" (load)="onUserImageLoad($event, obj.id)" />
         } @else if (obj.type === 'iframe') {
             <!-- Show og:image preview when in image mode -->
             <img [src]="obj.ogImage" alt="URL preview" class="object-content" (load)="onOgImageLoad($event, obj.id)" />
