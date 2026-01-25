@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { PLATFORM_ID } from '@angular/core';
-import { fetchRandomGradimUrlFromApi, getRandomGradimUrl } from '../gradim-urls';
+import { fetchRandomGradimUrlFromApi } from '../gradim-urls';
 
 @Component({
   selector: 'app-url-wrapper',
@@ -21,9 +21,9 @@ export class UrlWrapper {
 
   constructor() {
     const wallUrlFromLocation = this.getWallUrlFromLocation();
-    const initialUrl = wallUrlFromLocation ?? getRandomGradimUrl();
-
-    this.setUrl(initialUrl);
+    if (wallUrlFromLocation) {
+      this.setUrl(wallUrlFromLocation);
+    }
 
     if (this.isBrowser && !wallUrlFromLocation) {
       this.loadRandomUrlFromApi();
