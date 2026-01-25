@@ -1883,6 +1883,7 @@ export class Canvas {
     let nextViewportY = this.viewportY();
     let nextZoom = this.zoom();
 
+    let debugCount = 0;
     for (const segment of segments) {
       // Find the two delimiter slashes that wrap the numeric transform part.
       // Transform is always four comma-separated numbers, so we search from the end
@@ -1913,6 +1914,10 @@ export class Canvas {
       }
 
       if (!encodedRef) {
+        if (debugCount < 3) {
+          console.warn('[HashParse] No transform found for segment', segment.substring(0, 200));
+        }
+        debugCount++;
         continue; // Could not find a valid numeric transform block
       }
       if (!encodedRef || !transformPart) continue;
@@ -1925,6 +1930,9 @@ export class Canvas {
       seenSegments.add(segmentKey);
 
       const ref = decodeURIComponent(encodedRef);
+      if (debugCount < 3) {
+        console.log('[HashParse] ref', ref, 'transform', transformPart, 'flags', flagsPart);
+      }
       if (ref === 'canvas') {
         const [vx, vy, vz] = transformPart.split(',').map(parseFloat);
         if (!Number.isNaN(vx)) nextViewportX = vx;
@@ -1947,10 +1955,14 @@ export class Canvas {
       const height = width * safeRatio;
       let content = this.resolveContent(ref, type);
       if (!content) {
+        if (debugCount < 3) {
+          console.warn('[HashParse] resolveContent failed for type', type, 'ref', ref);
+        }
         // Keep image objects present with a transparent placeholder; skip invalid iframes
         if (type === 'image') {
           content = this.transparentPixel;
         } else {
+          debugCount++;
           continue;
         }
       }
@@ -1972,6 +1984,7 @@ export class Canvas {
         ogImage,
         displayMode,
       });
+      debugCount++;
     }
 
     this.viewportX.set(nextViewportX);
