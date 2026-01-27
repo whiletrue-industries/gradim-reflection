@@ -2269,7 +2269,7 @@ export class Canvas {
           console.log('[Canvas] Share successful');
           return;
         } catch (err) {
-          console.warn('[Canvas] Direct share failed:', err?.name, err?.message);
+          console.warn('[Canvas] Direct share failed:', (err as any)?.name, (err as any)?.message);
         }
       } else {
         console.log('[Canvas] navigator.share not available in canvas context');
