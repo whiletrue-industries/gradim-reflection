@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - sharing-menu-setup
+      - canvas
 
   workflow_dispatch:
 
