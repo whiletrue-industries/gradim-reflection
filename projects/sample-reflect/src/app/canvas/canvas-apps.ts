@@ -28,29 +28,43 @@ interface CanvasObject {
 
 export const CANVAS_APPS: CanvasApp[] = [
   {
-    id: 'centered',
-    label: 'Center',
-    render: (objects: CanvasObject[]): CanvasObject[] => {
-      // App 1: Center the first image/content
-      // Just return objects as-is; canvas will handle centering based on app
-      return objects;
-    },
+    id: 'image',
+    label: 'Image',
+    render: (objects: CanvasObject[]): CanvasObject[] => objects,
   },
   {
-    id: 'frame',
-    label: 'Frame',
-    render: (objects: CanvasObject[]): CanvasObject[] => {
-      // App 2: Place an empty frame next to the image
-      // The canvas will handle creating and positioning the frame
-      return objects;
-    },
+    id: 'gallery',
+    label: 'Gallery',
+    render: (objects: CanvasObject[]): CanvasObject[] => objects,
   },
   {
-    id: 'app3',
-    label: 'App 3',
-    render: (objects: CanvasObject[]): CanvasObject[] => {
-      // Placeholder for future apps
-      return objects;
-    },
+    id: 'merge',
+    label: 'Merge',
+    render: (objects: CanvasObject[]): CanvasObject[] => objects,
+  },
+  {
+    id: 'map',
+    label: 'Map',
+    render: (objects: CanvasObject[]): CanvasObject[] => objects,
+  },
+  {
+    id: 'draw',
+    label: 'Draw',
+    render: (objects: CanvasObject[]): CanvasObject[] => objects,
+  },
+  {
+    id: 'shape',
+    label: 'Shape',
+    render: (objects: CanvasObject[]): CanvasObject[] => objects,
+  },
+  {
+    id: 'crop',
+    label: 'Crop',
+    render: (objects: CanvasObject[]): CanvasObject[] => objects,
+  },
+  {
+    id: 'target',
+    label: 'Target',
+    render: (objects: CanvasObject[]): CanvasObject[] => objects,
   },
 ];

@@ -1,5 +1,5 @@
-import { Component, input, output, computed, signal, effect, ChangeDetectionStrategy, isPlatformBrowser, PLATFORM_ID, inject, afterNextRender } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, input, output, computed, signal, effect, ChangeDetectionStrategy, PLATFORM_ID, inject, afterNextRender } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { CANVAS_APPS } from './canvas-apps';
 
 @Component({
