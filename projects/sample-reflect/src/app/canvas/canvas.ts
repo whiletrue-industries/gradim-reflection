@@ -1133,11 +1133,8 @@ export class Canvas {
 
   // Share (mobile)
   protected async onShareClick(): Promise<void> {
-    try {
-      await this.shareComposition();
-    } catch (error) {
-      console.error('Failed to share composition:', error);
-    }
+    // Toggle the shared menu which contains download + share options
+    this.shareMenuOpen.update(v => !v);
   }
   
   // Add menu helpers (mobile)
