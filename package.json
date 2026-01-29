@@ -8,6 +8,8 @@
     "start:https:sample": "node scripts/start-https.js sample-reflect",
     "start:main": "ng serve main --port 4200 --host 0.0.0.0",
     "start:sample": "ng serve sample-reflect --port 4201 --host 0.0.0.0",
+    "start:sharing-menu": "ng serve sharing-menu --port 4202 --host 0.0.0.0",
+    "start:all": "concurrently -n main,sample-reflect,sharing-menu -c \"bgBlue.bold,bgGreen.bold,bgCyan.bold\" \"npm:start:main\" \"npm:start:sample\" \"npm:start:sharing-menu\"",
     "certs:generate": "node scripts/generate-cert.js",
     "build": "ng build",
     "build:ssr:main": "ng build main --configuration dev-ssr",

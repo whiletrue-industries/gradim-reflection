@@ -6,10 +6,11 @@ const project = process.argv[2] || 'main';
 const PORTS = {
   'main': 4200,
   'sample-reflect': 4201,
+  'sharing-menu': 4202,
 };
 
 if (!PORTS[project]) {
-  console.error(`Unknown project: ${project}. Use 'main' or 'sample-reflect'.`);
+  console.error(`Unknown project: ${project}. Use 'main', 'sample-reflect', or 'sharing-menu'.`);
   process.exit(1);
 }
 
