@@ -42,6 +42,8 @@
     "express": "^5.1.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
+    ,
+    "feather-icons": "^4.29.0"
   },
   "devDependencies": {
     "@angular/build": "^21.0.2",

@@ -153,6 +153,35 @@ export class Canvas {
     const centerY = this.safeInsetTop + height / 2;
     return { width, height, centerX, centerY };
   }
+
+  // Dynamically import feather-icons and replace markers with SVGs (browser-only)
+  private async replaceFeatherIcons(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) return;
+    try {
+      const w = window as any;
+      if (w.feather && typeof w.feather.replace === 'function') {
+        setTimeout(() => { try { w.feather.replace(); } catch (e) {} }, 0);
+        return;
+      }
+      // Load feather from CDN once and run replace on load
+      const scriptId = 'feather-icons-cdn';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js';
+        script.async = true;
+        script.onload = () => {
+          try { (window as any).feather.replace(); } catch (e) {}
+        };
+        document.head.appendChild(script);
+      } else {
+        // script exists but feather not ready yet
+        setTimeout(() => { try { (window as any).feather.replace(); } catch (e) {} }, 200);
+      }
+    } catch (e) {
+      // ignore failures
+    }
+  }
   
   protected readonly transformHandles: TransformHandle[] = [
     { type: 'scale-nw', cursor: 'nw-resize' },
@@ -236,6 +265,9 @@ export class Canvas {
       afterNextRender(() => {
         this.cleanupOrphanedStorage();
         
+        // Run icon replacement for feather icons (browser-only)
+        this.replaceFeatherIcons();
+
         // Check for loadUrl query parameter (from URL wrapper)
         try {
           const urlParams = new URLSearchParams(window.location.search);
@@ -1134,12 +1166,23 @@ export class Canvas {
   // Share (mobile)
   protected async onShareClick(): Promise<void> {
     // Toggle the shared menu which contains download + share options
-    this.shareMenuOpen.update(v => !v);
+    this.shareMenuOpen.update(v => {
+      const nv = !v;
+      if (nv) {
+        // ensure icons are rendered inside the menu
+        setTimeout(() => this.replaceFeatherIcons(), 0);
+      }
+      return nv;
+    });
   }
   
   // Add menu helpers (mobile)
   protected toggleAddMenu(): void {
-    this.addMenuOpen.update(v => !v);
+    this.addMenuOpen.update(v => {
+      const nv = !v;
+      if (nv) setTimeout(() => this.replaceFeatherIcons(), 0);
+      return nv;
+    });
     if (this.addMenuOpen()) {
       this.shareMenuOpen.set(false);
     }

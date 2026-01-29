@@ -647,19 +647,21 @@
       z-index: 101;
       
       .share-menu-item {
-        display: block;
-        width: 100%;
-        text-align: left;
-        color: white;
-        border: none;
-        background: none;
-        padding: 12px 16px;
-        font-size: 13px;
-        cursor: pointer;
-        transition: background-color 0.2s;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      color: white;
+      border: none;
+      background: none;
+      padding: 12px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
         
         &:hover {
           background-color: rgba(255, 255, 255, 0.1);
@@ -736,7 +738,10 @@
   backdrop-filter: blur(10px);
 }
 
-.add-fab .add-menu button {
+  .add-fab .add-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -755,9 +760,33 @@
 }
 
 .share-fab .share-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.share-menu svg,
+.add-menu svg,
+.share-fab .share-menu svg,
+.add-fab .add-menu svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.share-fab .share-menu i[data-feather] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.add-fab .add-menu i[data-feather] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
 }
 
 .share-fab {
