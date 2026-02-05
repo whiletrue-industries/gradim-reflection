@@ -224,6 +224,100 @@
           "builder": "@angular/build:unit-test"
         }
       }
+    },
+    "sharing-menu": {
+      "projectType": "application",
+      "schematics": {
+        "@schematics/angular:component": {
+          "style": "less"
+        }
+      },
+      "root": "projects/sharing-menu",
+      "sourceRoot": "projects/sharing-menu/src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "projects/sharing-menu/src/main.ts",
+            "tsConfig": "projects/sharing-menu/tsconfig.app.json",
+            "inlineStyleLanguage": "less",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "projects/sharing-menu/public"
+              }
+            ],
+            "styles": [
+              "projects/sharing-menu/src/styles.less"
+            ],
+            "server": "projects/sharing-menu/src/main.server.ts",
+            "outputMode": "server",
+            "ssr": {
+              "entry": "projects/sharing-menu/src/server.ts"
+            }
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "15kB",
+                  "maximumError": "20kB"
+                }
+              ],
+              "outputHashing": "all",
+              "outputMode": "static",
+              "server": false,
+              "ssr": false,
+              "baseHref": "/gradim-reflection/sharing-menu/",
+              "outputPath": "dist/sharing-menu"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "outputMode": "static",
+              "server": false,
+              "ssr": false
+            },
+            "dev-ssr": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "outputMode": "server",
+              "server": "projects/sharing-menu/src/main.server.ts",
+              "ssr": {
+                "entry": "projects/sharing-menu/src/server.ts"
+              }
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "proxyConfig": "proxy.conf.json"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "sharing-menu:build:production"
+            },
+            "development": {
+              "buildTarget": "sharing-menu:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test"
+        }
+      }
     }
   }
 }

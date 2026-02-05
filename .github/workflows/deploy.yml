@@ -44,12 +44,17 @@ jobs:
       - name: Build sample-reflect app
         run: npm run build -- sample-reflect --configuration production
 
+      - name: Build sharing-menu app
+        run: npm run build -- sharing-menu --configuration production
+
       - name: Prepare deployment directory
         run: |
           mkdir -p deploy
           cp -r dist/main/browser/* deploy/
           mkdir -p deploy/sample-reflect
           cp -r dist/sample-reflect/browser/* deploy/sample-reflect/
+          mkdir -p deploy/sharing-menu
+          cp -r dist/sharing-menu/browser/* deploy/sharing-menu/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
