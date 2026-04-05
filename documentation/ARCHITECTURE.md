@@ -21,6 +21,15 @@ GraDiM Reflections is an independent platform for interactive applications that 
 Inner apps are independent Angular applications that can be embedded within the main app:
 - **sample-reflect** (`projects/sample-reflect`): Interactive canvas application for manipulating and composing visual content
 
+#### sample-reflect Components
+- **Canvas** (`app/canvas/`): Fullscreen drag-and-drop canvas. Manages image/iframe objects with transform handles, zoom, hash-based state persistence.
+- **CanvasCarousel** (`app/canvas/canvas-carousel.ts`): Bottom app-selector carousel with swipe support.
+- **ArchiveDrawer** (`app/archive-drawer/`): Top-anchored overlay drawer. A 48 px handle tab is always visible at the top of the screen; clicking or dragging it slides the drawer down to cover 75 % of the viewport. On each open it fetches 10 random archive images from the Omeka-S API and displays them as scattered, overlapping polaroid-style thumbnails with normalised pixel area and ±16° random rotation. Selecting a thumbnail adds it to the canvas.
+
+#### Shared Utilities (sample-reflect)
+- **`src/archive-utils.ts`**: `fetchRandomArchiveImageUrl()` / `fetchMultipleArchiveImageUrls(count)` — fetches random archive image URLs directly from the Gradim Omeka-S `files/large/` endpoint.
+- **`src/url-metadata.ts`**: `extractPreviewImage()` — extracts `og:image` from HTML with special handling for Gradim Wall URLs.
+
 Each inner app:
 - Uses the shared `Layout` component from the common library
 - Imports global styles from `common/src/styles/global.less`

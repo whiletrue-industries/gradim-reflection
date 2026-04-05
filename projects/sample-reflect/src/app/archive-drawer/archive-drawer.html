@@ -1,0 +1,77 @@
+<div
+  class="archive-drawer"
+  [style.transform]="drawerTransform()"
+  [style.transition]="drawerTransition()"
+>
+  <!-- Thumbnail content area (hidden above viewport when drawer is closed) -->
+  <div class="archive-drawer-content">
+    @if (isLoading()) {
+      <div class="archive-loading" aria-live="polite">
+        <div class="archive-loading-spinner"></div>
+        <span>Loading archive…</span>
+      </div>
+    } @else {
+      @for (thumb of thumbnails(); track thumb.id) {
+        <button
+          class="archive-thumbnail-wrapper"
+          [class.loaded]="thumb.loaded"
+          [style.left.px]="thumb.x"
+          [style.top.px]="thumb.y"
+          [style.width.px]="thumb.width"
+          [style.height.px]="thumb.height"
+          [style.transform]="getThumbnailTransform(thumb)"
+          (click)="onThumbnailClick(thumb)"
+          aria-label="Add archive photo to canvas"
+        >
+          <img
+            class="archive-thumbnail-img"
+            [src]="thumb.url"
+            alt="Archive photo"
+            (load)="onThumbnailLoad($event, thumb.id)"
+            (error)="onThumbnailError(thumb.id)"
+          />
+        </button>
+      }
+    }
+  </div>
+
+  <!-- Drag handle — positioned at the bottom of the panel, visible at the top of the
+       screen when the drawer is closed. -->
+  <div
+    class="archive-drawer-handle"
+    role="button"
+    [attr.aria-expanded]="isOpen()"
+    aria-label="Toggle archive drawer"
+    tabindex="0"
+    (pointerdown)="onHandlePointerDown($event)"
+    (pointermove)="onHandlePointerMove($event)"
+    (pointerup)="onHandlePointerUp()"
+    (keydown.enter)="toggle()"
+    (keydown.space)="toggle(); $event.preventDefault()"
+  >
+    <div class="handle-drag-pill"></div>
+    <div class="handle-inner">
+      <!-- Archive / photos icon -->
+      <svg class="handle-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10A5 5 0 0 0 12 7zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
+      </svg>
+      <span class="handle-label">Archive</span>
+    </div>
+    <!-- Chevron indicates open / close direction -->
+    <svg
+      class="handle-chevron"
+      [class.open]="isOpen()"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  </div>
+</div>

@@ -239,6 +239,9 @@
   />
 </div>
 
+<!-- Archive Drawer (fixed overlay, sits above canvas content) -->
+<app-archive-drawer (thumbnailSelected)="onArchiveThumbnailSelected($event)" />
+
 <!-- Fixed share menu at bottom (outside canvas) -->
 <div class="share-menu-container">
   <div class="share-menu">

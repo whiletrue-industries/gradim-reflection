@@ -3,6 +3,7 @@ import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { CanvasCarousel } from './canvas-carousel';
 import { CANVAS_APPS } from './canvas-apps';
+import { ArchiveDrawer } from '../archive-drawer/archive-drawer';
 
 interface CanvasObject {
   id: string;
@@ -29,7 +30,7 @@ interface TransformHandle {
 
 @Component({
   selector: 'app-canvas',
-  imports: [CommonModule, CanvasCarousel],
+  imports: [CommonModule, CanvasCarousel, ArchiveDrawer],
   templateUrl: './canvas.html',
   styleUrl: './canvas.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -1481,6 +1482,44 @@ export class Canvas {
   protected cancelUrlModal(): void {
     this.showUrlModal.set(false);
     this.urlInputValue.set('');
+  }
+
+  /** Called when the user clicks an archive thumbnail to add it to the canvas. */
+  protected onArchiveThumbnailSelected(imageUrl: string): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const aspectRatio = img.naturalHeight / img.naturalWidth || 1;
+      const size = this.baseSize * 1.5;
+      this.addObject({
+        id: this.generateId(),
+        type: 'image',
+        x: (window.innerWidth / 2 - this.viewportX()) / this.zoom() - size / 2,
+        y: (window.innerHeight / 2 - this.viewportY()) / this.zoom() - (size * aspectRatio) / 2,
+        width: size,
+        height: size * aspectRatio,
+        rotation: 0,
+        content: imageUrl,
+        sourceRef: imageUrl,
+        originalAspectRatio: aspectRatio,
+      });
+    };
+    img.onerror = () => {
+      this.addObject({
+        id: this.generateId(),
+        type: 'image',
+        x: (window.innerWidth / 2 - this.viewportX()) / this.zoom() - this.baseSize / 2,
+        y: (window.innerHeight / 2 - this.viewportY()) / this.zoom() - this.baseSize / 2,
+        width: this.baseSize,
+        height: this.baseSize,
+        rotation: 0,
+        content: imageUrl,
+        sourceRef: imageUrl,
+        originalAspectRatio: 1,
+      });
+    };
+    img.src = imageUrl;
   }
 
   private addIframeFromUrl(url: string): void {
